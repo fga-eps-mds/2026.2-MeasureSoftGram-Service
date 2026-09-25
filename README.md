@@ -144,6 +144,12 @@ A documentação interativa das rotas da API (Swagger / OpenAPI) está disponív
 
 ## Como Rodar os Testes
 
+> **Aviso Importante sobre o Banco de Dados:** 
+> A suíte de testes deste projeto exige **obrigatoriamente um banco PostgreSQL** rodando. O código utiliza funções nativas exclusivas do Postgres (como o comando DISTINCT ON) para lidar com histórico e métricas, o que torna **impossível** rodar os testes utilizando um banco em memória mais simples como o SQLite.
+
+Para facilitar e não exigir que você instale o Postgres na sua máquina física, a solução recomendada é sempre rodar os testes utilizando o container do Docker Compose, já passando a variável de ambiente de testes para garantir que o banco não entre em conflito com os dados de desenvolvimento.
+
+
 ### Via Makefile (Recomendado)
 
 ```bash
@@ -172,9 +178,9 @@ O gerenciamento de dependências utiliza [`uv`](https://github.com/astral-sh/uv)
    ```bash
    uv sync
    ```
-3. Execute os testes:
+3. Execute os testes apontando para a configuração de teste:
    ```bash
-   uv run pytest src -v
+   DJANGO_SETTINGS_MODULE=config.settings.test uv run pytest src -v
    ```
 
 ---

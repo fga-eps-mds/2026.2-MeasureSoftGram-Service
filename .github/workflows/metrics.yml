@@ -18,7 +18,8 @@ jobs:
         run: mkdir analytics-raw-data
 
       - name: Coletar métricas no SonarCloud
-        run: pip install --only-binary=:all: requests==2.32.3 --break-system-packages && python parser.py ${{ github.event.repository.name }} ${{ github.ref_name }}
+        run: >-
+          pip install --only-binary=:all: requests==2.32.3 --break-system-packages && python parser.py ${{ github.event.repository.name }} ${{ github.ref_name }}
 
       - name: Envia métricas para repo de Doc
         env:
