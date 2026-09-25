@@ -49,6 +49,5 @@ CREATE_FAKE_DATA = _env_flag("CREATE_FAKE_DATA", "False")
 
 # (MSG-16) Origens permitidas em producao: Dominio canonico + Variaveis de Ambiente
 # A leitura dinamica das variaveis CORS_ALLOWED_ORIGINS e CSRF_TRUSTED_ORIGINS ja ocorre no base.py
-CORS_ALLOWED_ORIGINS.append('https://msgram.lappis.rocks')
-CSRF_TRUSTED_ORIGINS.append('https://msgram.lappis.rocks')
-
+CORS_ALLOWED_ORIGINS.append('https://msgram.lappis.rocks')  # noqa: F405
+CSRF_TRUSTED_ORIGINS.append('https://msgram.lappis.rocks')  # noqa: F405
