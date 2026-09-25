@@ -71,7 +71,6 @@ THIRD_PARTY_APPS = [
     "rest_framework.authtoken",
     "simple_history",
     "corsheaders",
-    "debug_toolbar",
     "dj_rest_auth",
     "dj_rest_auth.registration",
     "allauth",
@@ -113,7 +112,6 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "simple_history.middleware.HistoryRequestMiddleware",
-    "debug_toolbar.middleware.DebugToolbarMiddleware",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
