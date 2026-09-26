@@ -25,7 +25,6 @@ dependencies = [
   "msgram-core==1.4.9",
   "django-extensions==4.1",
   "setuptools>=75.0.0,<78",
-  "django-debug-toolbar==8.0.0",
 ]
 
 [dependency-groups]
@@ -39,6 +38,7 @@ dev = [
   "freezegun==1.5.1",
   "coverage",
   "pre-commit>=3.7.0",
+  "django-debug-toolbar==8.0.0",
 ]
 
 [tool.uv]
@@ -62,3 +62,12 @@ exclude = '''
 profile = "black"
 line_length = 119
 skip_glob = ["**/migrations/*"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+pythonpath = ["src"]
+testpaths = ["src"]
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+minversion = "6.0"
+addopts = "-ra -q"
+

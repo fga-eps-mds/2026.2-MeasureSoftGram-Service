@@ -32,15 +32,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5000",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    os.getenv(
-        "FRONTEND_DEV_URL",
-        "https://2024-1-measure-soft-gram.vercel.app",
-    ),
-    os.getenv(
-        "FRONTEND_PROD_URL",
-        "https://2024-1-measure-soft-gram.vercel.app",
-    ),
 ]
+
+# Read dynamic origins from env
+_env_cors = os.getenv("CORS_ALLOWED_ORIGINS", "")
+if _env_cors:
+    CORS_ALLOWED_ORIGINS.extend([o.strip() for o in _env_cors.split(",") if o.strip()])
+
 CORS_ALLOW_CREDENTIALS = True
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
@@ -71,7 +69,6 @@ THIRD_PARTY_APPS = [
     "rest_framework.authtoken",
     "simple_history",
     "corsheaders",
-    "debug_toolbar",
     "dj_rest_auth",
     "dj_rest_auth.registration",
     "allauth",
@@ -113,17 +110,9 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "simple_history.middleware.HistoryRequestMiddleware",
-    "debug_toolbar.middleware.DebugToolbarMiddleware",
 ]
 
-CSRF_TRUSTED_ORIGINS = [
-    o.strip()
-    for o in os.getenv(
-        "CSRF_TRUSTED_ORIGINS",
-        "https://*.2023-2-measuresoftgram-service-production.up.railway.app",
-    ).split(",")
-    if o.strip()
-]
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
