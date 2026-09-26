@@ -14,9 +14,15 @@ from subcharacteristics.models import CalculatedSubCharacteristic, SupportedSubC
 from subcharacteristics.serializers import CalculatedSubCharacteristicSerializer
 from tsqmi.models import TSQMI
 from tsqmi.serializers import TSQMISerializer
+import logging
+
+from utils.runtime_metrics import RUNTIME_MEASURE_KEYS
 
 # Métricas multi-valor (lista de floats por arquivo) — espelha
 # SupportedMetric.get_latest_metric_value em metrics/models.py:46.
+
+logger = logging.getLogger(__name__)
+
 _LISTED_FIL_METRICS = frozenset(
     {
         "coverage",
@@ -106,7 +112,21 @@ class MathModelServices:
         """Calcula medidas a partir das métricas em memória."""
         metric_index = self._index_metrics_by_key(collected_metrics)
 
-        qs = SupportedMeasure.objects.filter(key__in=measure_keys).prefetch_related("metrics")
+        skipped_keys = sorted(
+            set(measure_keys).intersection(RUNTIME_MEASURE_KEYS)
+        )
+        if skipped_keys:
+            logger.warning(
+                "Medidas de runtime excluídas do cálculo: %s. "
+                "Este fluxo não fornece comparação entre releases.",
+                ", ".join(skipped_keys),
+            )
+
+        qs = (
+            SupportedMeasure.objects.filter(key__in=measure_keys)
+            .exclude(key__in=RUNTIME_MEASURE_KEYS)
+            .prefetch_related("metrics")
+        )
 
         core_params = {"measures": []}
         for measure in qs:
