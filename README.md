@@ -180,7 +180,7 @@ O gerenciamento de dependências utiliza [`uv`](https://github.com/astral-sh/uv)
    ```
 3. Execute os testes:
    ```bash
-   uv run pytest src -v
+   uv run pytest
    ```
 
 ---

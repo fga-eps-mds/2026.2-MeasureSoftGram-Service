@@ -65,6 +65,9 @@ skip_glob = ["**/migrations/*"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.test"
+pythonpath = ["src"]
+testpaths = ["src"]
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
 minversion = "6.0"
 addopts = "-ra -q"
+

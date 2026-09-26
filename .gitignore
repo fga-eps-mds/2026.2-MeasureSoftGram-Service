@@ -149,3 +149,5 @@ ref
 .DS_Store
 output_sonar.json
 test.json
+.envs/
+
