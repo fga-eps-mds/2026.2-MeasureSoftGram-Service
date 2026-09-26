@@ -1,6 +1,7 @@
 import pytest
 from utils.managers import CacheManager
 
+
 @pytest.fixture(autouse=True)
 def clear_cache_manager():
     CacheManager.last_call = {
