@@ -112,11 +112,7 @@ MIDDLEWARE = [
     "simple_history.middleware.HistoryRequestMiddleware",
 ]
 
-CSRF_TRUSTED_ORIGINS = [
-    o.strip()
-    for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
-    if o.strip()
-]
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
