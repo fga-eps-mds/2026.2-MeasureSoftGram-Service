@@ -62,3 +62,9 @@ exclude = '''
 profile = "black"
 line_length = 119
 skip_glob = ["**/migrations/*"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+minversion = "6.0"
+addopts = "-ra -q"

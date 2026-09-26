@@ -178,9 +178,9 @@ O gerenciamento de dependências utiliza [`uv`](https://github.com/astral-sh/uv)
    ```bash
    uv sync
    ```
-3. Execute os testes apontando para a configuração de teste:
+3. Execute os testes:
    ```bash
-   DJANGO_SETTINGS_MODULE=config.settings.test uv run pytest src -v
+   uv run pytest src -v
    ```
 
 ---
