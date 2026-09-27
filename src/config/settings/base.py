@@ -24,6 +24,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", get_random_secret_key())
 DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "t", "1")
 
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
 
 
 # Allowed origins on CORS
@@ -32,18 +33,24 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5000",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    os.getenv(
-        "FRONTEND_DEV_URL",
-        "https://2024-1-measure-soft-gram.vercel.app",
-    ),
-    os.getenv(
-        "FRONTEND_PROD_URL",
-        "https://2024-1-measure-soft-gram.vercel.app",
-    ),
 ]
+
+# Read dynamic origins from env
+_env_cors = os.getenv("CORS_ALLOWED_ORIGINS", "")
+if _env_cors:
+    CORS_ALLOWED_ORIGINS.extend([o.strip() for o in _env_cors.split(",") if o.strip()])
+
 CORS_ALLOW_CREDENTIALS = True
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -71,7 +78,6 @@ THIRD_PARTY_APPS = [
     "rest_framework.authtoken",
     "simple_history",
     "corsheaders",
-    "debug_toolbar",
     "dj_rest_auth",
     "dj_rest_auth.registration",
     "allauth",
@@ -105,25 +111,19 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "allauth.account.middleware.AccountMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "simple_history.middleware.HistoryRequestMiddleware",
-    "debug_toolbar.middleware.DebugToolbarMiddleware",
 ]
 
-CSRF_TRUSTED_ORIGINS = [
-    o.strip()
-    for o in os.getenv(
-        "CSRF_TRUSTED_ORIGINS",
-        "https://*.2023-2-measuresoftgram-service-production.up.railway.app",
-    ).split(",")
-    if o.strip()
-]
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
@@ -322,6 +322,7 @@ BADGE_STALENESS_DAYS = int(os.getenv("BADGE_STALENESS_DAYS", "30"))
 # Grafana Proxy Configuration
 GRAFANA_CONFIG = {
     # NOSONAR — rede interna Docker
+    "BASE_URL": os.getenv("GRAFANA_BASE_URL", "http://grafana:3000"),  # NOSONAR — rede interna Docker
     "BASE_URL": os.getenv("GRAFANA_BASE_URL", "http://grafana:3000"),  # NOSONAR — rede interna Docker
     # NOSONAR — URL de dev
     "PUBLIC_URL": os.getenv("GRAFANA_PUBLIC_URL", "http://localhost:5000"),
