@@ -56,7 +56,7 @@ jobs:
       - name: Rodar Migrations
         env:
           # Chave pública e determinística usada somente no banco efêmero da CI.
-          GITHUB_TOKEN_ENCRYPTION_KEYS: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
+          GITHUB_TOKEN_ENCRYPTION_KEYS: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
         run: |
           uv run --locked python src/manage.py migrate
           uv run --locked python src/manage.py makemigrations --check --dry-run
