@@ -157,6 +157,9 @@ class CollectedMetric(models.Model):
         # Aqui estamos ordenando na ordem decrescente, ou seja, nos querysets
         # os registros mais recentes vem primeiro (qs.first() == mais recente)
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["repository", "metric", "-created_at"]),
+        ]
 
     metric = models.ForeignKey(
         SupportedMetric,

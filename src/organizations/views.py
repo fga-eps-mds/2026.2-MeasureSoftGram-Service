@@ -76,7 +76,7 @@ class RepositoryViewSet(
 
     def get_queryset(self):
         product = self.get_product()
-        qs = Repository.objects.all().order_by("-id").select_related("product")
+        qs = Repository.objects.all().order_by("-id").select_related("product", "product__organization")
         return qs.filter(product=product)
 
 
@@ -96,11 +96,7 @@ class RepositoriesTSQMILatestValueViewSet(
         product = self.get_product()
         qs = product.repositories.all()
         qs = qs.order_by("-id")
-        qs = qs.prefetch_related(
-            "calculated_tsqmis",
-            "product",
-            "product__organization",
-        )
+        qs = qs.select_related("product", "product__organization").prefetch_related("calculated_tsqmis")
         return qs
 
 
@@ -115,11 +111,7 @@ class RepositoriesTSQMIHistoryViewSet(
     def get_queryset(self):
         product = self.get_product()
         qs = product.repositories.all()
-        qs = qs.prefetch_related(
-            "calculated_tsqmis",
-            "product",
-            "product__organization",
-        )
+        qs = qs.select_related("product", "product__organization").prefetch_related("calculated_tsqmis")
         return qs
 
 
