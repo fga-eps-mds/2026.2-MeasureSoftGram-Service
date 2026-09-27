@@ -245,7 +245,16 @@ class GitHubReposViewSet(UserScopedMixin, viewsets.ViewSet):
 
         repos = []
         while url_fetch:
-            r = requests.get(url_fetch, headers=headers)
+            try:
+                r = requests.get(url_fetch, headers=headers, timeout=settings.GITHUB_TIMEOUT)
+            except requests.exceptions.Timeout:
+                return Response({"error": "Timeout contacting GitHub API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            except requests.exceptions.RequestException:
+                return Response({"error": "Error contacting GitHub API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            
+            if r.status_code == 401 or r.status_code == 403:
+                return Response({"error": "github_token_invalid", "details": r.json()}, status=status.HTTP_409_CONFLICT)
+            
             if r.status_code != 200:
                 return Response(
                     {
