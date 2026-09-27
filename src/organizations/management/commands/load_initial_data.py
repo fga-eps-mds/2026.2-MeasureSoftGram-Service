@@ -169,7 +169,6 @@ class Command(BaseCommand):
                 },
             )
 
-
     def model_generator(self, model, metrics):
         for metric in metrics:
             with contextlib.suppress(IntegrityError):
