@@ -470,7 +470,6 @@ class GitHubReposViewsTestCase(APITestCaseExpanded):
         self.assertEqual(len(response.json()), 1)
         self.assertEqual(response.json()[0]["name"], "repo-1")
 
-
     @patch("organizations.views.requests.get")
     def test_list_repos_timeout(self, mock_get):
         from requests.exceptions import Timeout
