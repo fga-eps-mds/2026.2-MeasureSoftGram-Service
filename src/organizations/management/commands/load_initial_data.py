@@ -1,4 +1,4 @@
-﻿# Python Imports
+# Python Imports
 import contextlib
 import datetime as dt
 import logging
@@ -150,33 +150,25 @@ class Command(BaseCommand):
         self.create_github_supported_metrics()
 
     def create_sonarqube_supported_metrics(self):
-        data = staticfiles.SONARQUBE_AVAILABLE_METRICS
-
-        sonar_metrics = [
-            SupportedMetric(
+        for metric in staticfiles.SONARQUBE_AVAILABLE_METRICS:
+            SupportedMetric.objects.get_or_create(
                 key=metric["key"],
-                name=metric["name"],
-                metric_type=metric["metric_type"],
+                defaults={
+                    "name": metric["name"],
+                    "metric_type": metric["metric_type"],
+                },
             )
-            for metric in data
-        ]
-        for metric in sonar_metrics:
-            with contextlib.suppress(IntegrityError):
-                metric.save()
 
     def create_github_supported_metrics(self):
-        github_metrics = [
-            SupportedMetric(
+        for metric in staticfiles.GITHUB_AVAILABLE_METRICS:
+            SupportedMetric.objects.get_or_create(
                 key=metric["key"],
-                name=metric["name"],
-                metric_type=metric["metric_type"],
+                defaults={
+                    "name": metric["name"],
+                    "metric_type": metric["metric_type"],
+                },
             )
-            for metric in staticfiles.GITHUB_AVAILABLE_METRICS
-        ]
 
-        for metric in github_metrics:
-            with contextlib.suppress(IntegrityError):
-                metric.save()
 
     def model_generator(self, model, metrics):
         for metric in metrics:
