@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from django.conf import settings
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
