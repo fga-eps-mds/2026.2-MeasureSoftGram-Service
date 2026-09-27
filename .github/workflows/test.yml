@@ -55,7 +55,8 @@ jobs:
 
       - name: Rodar Migrations
         env:
-          DJANGO_SETTINGS_MODULE: config.settings.test
+          # Chave pública e determinística usada somente no banco efêmero da CI.
+          GITHUB_TOKEN_ENCRYPTION_KEYS: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
         run: |
           uv run --locked python src/manage.py migrate
           uv run --locked python src/manage.py makemigrations --check --dry-run
