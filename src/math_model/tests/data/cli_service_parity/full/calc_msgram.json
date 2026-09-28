@@ -57,7 +57,7 @@
             },
             {
                 "key": "modifiability",
-                "value": 0.7127613129667936
+                "value": 0.7164637955754432
             },
             {
                 "key": "functional_completeness",
@@ -71,7 +71,7 @@
             },
             {
                 "key": "maintainability",
-                "value": 0.7127613129667936
+                "value": 0.7164637955754433
             },
             {
                 "key": "functional_suitability",
@@ -81,7 +81,7 @@
         "tsqmi": [
             {
                 "key": "tsqmi",
-                "value": 0.7527099982081088
+                "value": 0.7538572729178926
             }
         ]
     }

@@ -155,6 +155,7 @@ class LoadInitialDataFakeDataTestCase(APITestCaseExpanded):
                 repository=self.repository,
             ).values_list("measure__key", flat=True)
         )
+
         expected_keys = {
             "passed_tests",
             "test_builds",
@@ -164,6 +165,7 @@ class LoadInitialDataFakeDataTestCase(APITestCaseExpanded):
             "duplication_absense",
             "team_throughput",
             "ci_feedback_time",
+            "technical_debt_ratio",
         }
 
         self.assertEqual(calculated_keys, expected_keys)

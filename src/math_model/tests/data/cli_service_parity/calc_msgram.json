@@ -3,13 +3,13 @@
         "repository": [
             {
                 "key": "repository",
-                "value": "fga-eps-mds-2024.1-MeasureSoftGram-DOC"
+                "value": "github-task50"
             }
         ],
         "version": [
             {
                 "key": "version",
-                "value": "28-07-2024-00-00"
+                "value": "27-09-2026-00-00"
             }
         ],
         "measures": [
