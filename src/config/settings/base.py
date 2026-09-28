@@ -151,6 +151,8 @@ DATABASES = {
         "PASSWORD": POSTGRES_PASSWORD,
         "HOST": POSTGRES_HOST,
         "PORT": POSTGRES_PORT,
+        "CONN_MAX_AGE": int(os.getenv("CONN_MAX_AGE", 60)),
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 
@@ -196,6 +198,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Django Rest Framework config
 REST_FRAMEWORK = {
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 500,
     "DEFAULT_PARSER_CLASSES": ("rest_framework.parsers.JSONParser",),
@@ -211,6 +214,14 @@ ACCOUNT_EMAIL_VERIFICATION = "none"
 LOGIN_REDIRECT_URL = os.getenv("LOGIN_REDIRECT_URL", "127.0.0.1:8080")
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
 GITHUB_SECRET = os.getenv("GITHUB_SECRET", "")
+
+# First key encrypts new values; remaining keys allow reading during rotation.
+GITHUB_TOKEN_ENCRYPTION_KEYS = [
+    key.strip() for key in os.getenv("GITHUB_TOKEN_ENCRYPTION_KEYS", "").split(",") if key.strip()
+]
+# The encrypted CustomUser field is the only persistent OAuth token store.
+SOCIALACCOUNT_STORE_TOKENS = False
+SOCIALACCOUNT_ADAPTER = "accounts.adapters.EncryptedTokenSocialAccountAdapter"
 
 SOCIALACCOUNT_PROVIDERS = {
     "github": {
@@ -236,6 +247,7 @@ AMBIENT_TEST_OR_DEV = os.getenv("AMBIENT_TEST_OR_DEV", "True").lower() in (
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
+GITHUB_TIMEOUT = int(os.getenv("GITHUB_TIMEOUT", "10"))
 GITHUB_ISSUE_METRICS_THRESHOLD = int(os.getenv("GITHUB_ISSUE_METRICS_THRESHOLD", "7"))
 
 MAXIMUM_NUMBER_OF_HISTORICAL_RECORDS = int(
