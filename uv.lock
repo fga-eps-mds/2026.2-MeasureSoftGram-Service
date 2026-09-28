@@ -614,6 +614,7 @@ dependencies = [
     { name = "django-allauth", extra = ["socialaccount"] },
     { name = "django-apscheduler" },
     { name = "django-cors-headers" },
+    { name = "django-debug-toolbar" },
     { name = "django-extensions" },
     { name = "django-simple-history" },
     { name = "djangorestframework" },
@@ -632,7 +633,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "coverage" },
-    { name = "django-debug-toolbar" },
     { name = "freezegun" },
     { name = "parameterized" },
     { name = "pre-commit" },
@@ -645,19 +645,19 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "asgiref", specifier = "==3.5.2" },
-    { name = "dj-database-url", specifier = "==0.5.0" },
-    { name = "dj-rest-auth", specifier = "==2.2.5" },
-    { name = "django", specifier = "==4.0.6" },
-    { name = "django-allauth", specifier = "==0.51.0" },
-    { name = "django-apscheduler", specifier = "==0.6.2" },
-    { name = "django-cors-headers", specifier = "==3.13.0" },
-    { name = "django-debug-toolbar", specifier = "==3.5.0" },
-    { name = "django-extensions", specifier = "==3.2.3" },
-    { name = "django-simple-history", specifier = "==3.1.1" },
-    { name = "djangorestframework", specifier = "==3.13.1" },
-    { name = "drf-nested-routers", specifier = "==0.93.4" },
-    { name = "drf-yasg", specifier = "==1.21.7" },
+    { name = "asgiref", specifier = "==3.8.1" },
+    { name = "dj-database-url", specifier = "==3.1.2" },
+    { name = "dj-rest-auth", specifier = "==7.2.0" },
+    { name = "django", specifier = "==5.2.17" },
+    { name = "django-allauth", extras = ["socialaccount"], specifier = "==65.19.2" },
+    { name = "django-apscheduler", specifier = "==0.7.0" },
+    { name = "django-cors-headers", specifier = "==4.9.0" },
+    { name = "django-debug-toolbar", specifier = "==8.0.0" },
+    { name = "django-extensions", specifier = "==4.1" },
+    { name = "django-simple-history", specifier = "==3.13.0" },
+    { name = "djangorestframework", specifier = "==3.18.0" },
+    { name = "drf-nested-routers", specifier = "==0.95.3" },
+    { name = "drf-yasg", specifier = "==1.21.15" },
     { name = "gunicorn", specifier = "==20.1.0" },
     { name = "msgram-core", specifier = "==1.4.9" },
     { name = "psycopg2-binary", specifier = "==2.9.11" },
@@ -671,7 +671,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage" },
-    { name = "django-debug-toolbar", specifier = "==8.0.0" },
     { name = "freezegun", specifier = "==1.5.1" },
     { name = "parameterized", specifier = "~=0.8.1" },
     { name = "pre-commit", specifier = ">=3.7.0" },
