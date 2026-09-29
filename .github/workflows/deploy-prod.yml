@@ -39,7 +39,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       # ~/msgram-deploy e o diretorio canonico de deploy na box (compartilhado
       # com o deploy do Front). Os env-vars vivem em ~/msgram-deploy/env-vars
@@ -61,7 +61,7 @@ jobs:
           GRAFANA_PERSIST_DIR: /home/lappis/msgram-grafana
 
       - name: Login no DockerHub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.3.0
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
