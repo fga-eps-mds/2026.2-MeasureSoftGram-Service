@@ -79,6 +79,7 @@ class LogoutViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
     permission_classes = (IsAuthenticated,)
 
     def destroy(self, request, *args, **kwargs):
+        Token.objects.filter(user=request.user).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
