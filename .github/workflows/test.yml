@@ -27,12 +27,12 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: "3.12"
 
@@ -46,6 +46,14 @@ jobs:
         run: |
           uvx --no-build flake8==7.1.1 src/
 
+      - name: Rodar Migrations
+        env:
+          # Chave pública e determinística usada somente no banco efêmero da CI.
+          GITHUB_TOKEN_ENCRYPTION_KEYS: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
+        run: |
+          uv run --locked python src/manage.py makemigrations --check --dry-run
+          uv run --locked python src/manage.py migrate
+
       - name: Rodar testes
         run: |
           uv run --locked coverage erase
@@ -53,19 +61,17 @@ jobs:
           uv run --locked coverage xml -o coverage.xml
           uv run --locked coverage report --show-missing
 
-      - name: Rodar Migrations
-        env:
-          # Chave pública e determinística usada somente no banco efêmero da CI.
-          GITHUB_TOKEN_ENCRYPTION_KEYS: MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=
-        run: |
-          uv run --locked python src/manage.py migrate
-          uv run --locked python src/manage.py makemigrations --check --dry-run
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
+      - name: Scanner do SonarCloud
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
             -Dsonar.projectKey=${{ github.repository_owner }}_${{ github.event.repository.name }}
+
+      - name: Notificação de SonarCloud ignorado (PR cross-repo sem segredos)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::notice::PR cross-repository detectado (secrets bloqueados pelo GitHub). Testes concluídos com sucesso; análise estática será consolidada no push da branch principal."

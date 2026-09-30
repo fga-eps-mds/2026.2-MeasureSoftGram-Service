@@ -1,25 +1,26 @@
-name: msg
+name: MSG Action
+
+# Este workflow executa a MeasureSoftGram Action, que analisa o projeto e comenta uma tabela de métricas nos Pull Requests.
 
 on:
-  workflow_run:
-    workflows: ["Build"]
-    types:
-      - completed
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [ "develop", "main" ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest  
-
+  msgram_job:
+    runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    - name: msg
-      uses: fga-eps-mds/2026.1-MeasureSoftGram-Action@main
-      with: 
-        githubToken: ${{ secrets.GITHUBTOKEN }} # Token do GitHub
-        msgramServiceToken: ${{ secrets.MSGRAMSERVICETOKEN }} # Token para acessar o serviço MeasureSoftGram
-        productName: "Measure"
-        workflowName: 'Build' # Nome do seu worflow que realiza a build da release
-        collectSonarqubeMetrics: true # Flag que determina se métricas do Sonarqube serão persistidas
-        collectGithubMetrics: true # Flag que determina se métricas do Github serão persistidas
-        usLabel: "US" # Label
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: MeasureSoftGram Action
+        uses: fga-eps-mds/MeasureSoftGram-Action@main # NOSONAR
+        continue-on-error: true
+        with:
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          msgramServiceToken: ${{ secrets.MSGRAM_SERVICE_TOKEN }}
+          productName: "MeasureSoftGram"
+          workflowName: "Rodar Testes"
+          collectSonarqubeMetrics: "true"
+          collectGithubMetrics: "true"
