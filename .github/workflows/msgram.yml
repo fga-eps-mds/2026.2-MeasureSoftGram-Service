@@ -1,3 +1,4 @@
+# Este workflow executa a MeasureSoftGram Action, que analisa o projeto e comenta uma tabela de métricas nos Pull Requests.
 name: msg
 
 on:
@@ -14,7 +15,8 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
     - name: msg
-      uses: fga-eps-mds/2026.1-MeasureSoftGram-Action@main
+      uses: fga-eps-mds/MeasureSoftGram-Action@main
+      continue-on-error: true
       with: 
         githubToken: ${{ secrets.GITHUBTOKEN }} # Token do GitHub
         msgramServiceToken: ${{ secrets.MSGRAMSERVICETOKEN }} # Token para acessar o serviço MeasureSoftGram
