@@ -98,3 +98,31 @@ class GithubLoginTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"non_field_errors": ["Failed to exchange code for access token"]})
+
+
+def fake_gitlab():
+    """Simula a troca do code e a API de perfil do GitLab."""
+    responses = {
+        "/oauth/token": VALID_TOKEN_PAYLOAD,
+        "/api/v4/user": {"id": 7, "username": "octolab", "name": "Octo Lab", "email": GITHUB_EMAIL},
+    }
+
+    def request(session, method, url, *args, **kwargs):
+        for suffix, payload in responses.items():
+            if url.endswith(suffix):
+                return github_response(payload)
+        raise AssertionError(f"Requisição inesperada para {url}")
+
+    return patch("requests.Session.request", new=request)
+
+
+class GitlabLoginConflictTests(TestCase):
+    def test_login_with_email_of_existing_account_names_gitlab(self):
+        CustomUser.objects.create_user(username="octo", email=GITHUB_EMAIL, password="secret")
+
+        with fake_gitlab():
+            response = APIClient().post(reverse("gitlab-login"), {"code": "valid-code"}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        message = "O e-mail desta conta do GitLab já está em uso por outro usuário do MeasureSoftGram."
+        self.assertEqual(response.json(), {"non_field_errors": [message]})
