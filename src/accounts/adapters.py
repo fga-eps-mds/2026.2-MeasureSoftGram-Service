@@ -6,7 +6,7 @@ from django.http import HttpResponseBadRequest
 
 from accounts.signals import save_github_token
 
-EMAIL_ALREADY_REGISTERED = "O e-mail desta conta do GitHub já está em uso por outro usuário do MeasureSoftGram."
+EMAIL_ALREADY_REGISTERED = "O e-mail desta conta do {provider} já está em uso por outro usuário do MeasureSoftGram."
 
 
 class EncryptedTokenSocialAccountAdapter(DefaultSocialAccountAdapter):
@@ -14,7 +14,8 @@ class EncryptedTokenSocialAccountAdapter(DefaultSocialAccountAdapter):
         # Sem isso o allauth redireciona para o formulario de signup dele, que
         # nao esta montado nesta API, e o login responde 500.
         if not sociallogin.is_existing and self._email_is_taken(sociallogin):
-            raise ImmediateHttpResponse(HttpResponseBadRequest(EMAIL_ALREADY_REGISTERED))
+            provider = sociallogin.account.get_provider().name
+            raise ImmediateHttpResponse(HttpResponseBadRequest(EMAIL_ALREADY_REGISTERED.format(provider=provider)))
 
     @staticmethod
     def _email_is_taken(sociallogin):
