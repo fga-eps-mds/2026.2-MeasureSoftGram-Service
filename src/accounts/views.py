@@ -280,15 +280,19 @@ class GitLabNamespacesViewSet(viewsets.ViewSet):
                 r_groups = future_groups.result()
         except requests.exceptions.Timeout:
             return Response(
-                {"error": "gitlab_token_invalid", "details": "Timeout contacting GitLab API."},
-                status=status.HTTP_409_CONFLICT,
+                {"error": "gitlab_timeout", "details": "Timeout contacting GitLab API."},
+                status=status.HTTP_504_GATEWAY_TIMEOUT,
             )
         except requests.exceptions.RequestException:
             return Response(
-                {"error": "gitlab_token_invalid", "details": "Error contacting GitLab API."},
-                status=status.HTTP_409_CONFLICT,
+                {"error": "gitlab_unavailable", "details": "Error contacting GitLab API."},
+                status=status.HTTP_502_BAD_GATEWAY,
             )
 
+        return self._build_response(r_user, r_groups)
+
+    @staticmethod
+    def _build_response(r_user, r_groups):
         if r_user.status_code in (401, 403) or r_groups.status_code in (401, 403):
             bad_resp = r_user if r_user.status_code in (401, 403) else r_groups
             details = {}

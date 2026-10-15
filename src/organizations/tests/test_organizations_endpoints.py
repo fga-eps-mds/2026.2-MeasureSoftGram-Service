@@ -724,6 +724,20 @@ class GitHubReposViewsTestCase(APITestCaseExpanded):
 
         url = reverse("gitlab-projects-list", kwargs={"organization_pk": org.id})
         response = self.client.get(url, {"namespace_id": 42})
-        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
-        self.assertEqual(response.json()["error"], "gitlab_token_invalid")
+        self.assertEqual(response.status_code, status.HTTP_504_GATEWAY_TIMEOUT)
+        self.assertEqual(response.json()["error"], "gitlab_timeout")
 
+    @patch("organizations.views.requests.get")
+    def test_gitlab_projects_connection_error(self, mock_get):
+        from requests.exceptions import ConnectionError
+
+        org = self.get_organization()
+        self.user.gitlab_access_token = "my-token"
+        self.user.save()
+
+        mock_get.side_effect = ConnectionError("ConnectionError from gitlab")
+
+        url = reverse("gitlab-projects-list", kwargs={"organization_pk": org.id})
+        response = self.client.get(url, {"namespace_id": 42})
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertEqual(response.json()["error"], "gitlab_unavailable")
