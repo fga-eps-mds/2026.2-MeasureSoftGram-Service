@@ -121,6 +121,8 @@ class Repository(models.Model):
     imported = models.BooleanField(default=False)
     github_repo_id = models.BigIntegerField(null=True, blank=True)
     github_full_name = models.CharField(max_length=255, null=True, blank=True)
+    gitlab_project_id = models.BigIntegerField(null=True, blank=True)
+    gitlab_path_with_namespace = models.CharField(max_length=255, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         self.key = slugify(self.name)
@@ -135,6 +137,18 @@ class Repository(models.Model):
                     parts = [p for p in parsed.path.split("/") if p]
                     if len(parts) >= 2:
                         self.github_full_name = f"{parts[0]}/{parts[1]}"
+            except Exception:
+                pass
+
+        if self.platform == "gitlab" and self.url and not self.gitlab_path_with_namespace:
+            from urllib.parse import urlparse
+
+            try:
+                parsed = urlparse(self.url)
+                if "gitlab.com" in parsed.netloc:
+                    parts = [p for p in parsed.path.strip("/").split("/") if p]
+                    if parts:
+                        self.gitlab_path_with_namespace = "/".join(parts)
             except Exception:
                 pass
 
