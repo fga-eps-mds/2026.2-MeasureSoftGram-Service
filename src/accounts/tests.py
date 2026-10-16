@@ -723,9 +723,23 @@ class AccountsViews(APITestCaseExpanded):
         self.client.credentials(HTTP_AUTHORIZATION="Token " + Token.objects.create(user=self.user).key)
         url = reverse("gitlab-namespaces")
         response = self.client.get(url, format="json")
-        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
-        self.assertEqual(response.json()["error"], "gitlab_token_invalid")
+        self.assertEqual(response.status_code, status.HTTP_504_GATEWAY_TIMEOUT)
+        self.assertEqual(response.json()["error"], "gitlab_timeout")
 
+    @patch("accounts.views.requests.get")
+    def test_gitlab_namespaces_connection_error(self, mock_get):
+        from requests.exceptions import ConnectionError
+
+        self.user.gitlab_access_token = "gl_token_123"
+        self.user.save()
+
+        mock_get.side_effect = ConnectionError("ConnectionError from gitlab")
+
+        self.client.credentials(HTTP_AUTHORIZATION="Token " + Token.objects.create(user=self.user).key)
+        url = reverse("gitlab-namespaces")
+        response = self.client.get(url, format="json")
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertEqual(response.json()["error"], "gitlab_unavailable")
 
 
 class AccountsAppConfigTest(SimpleTestCase):

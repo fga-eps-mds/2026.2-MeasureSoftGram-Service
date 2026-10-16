@@ -299,7 +299,7 @@ class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def list(self, request, organization_pk=None):
-        org = self.get_organization()
+        self.get_organization()
 
         user = request.user
         token = user.gitlab_access_token
@@ -351,15 +351,19 @@ class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
             r = requests.get(url, headers=headers, params=params, timeout=timeout)
         except requests.exceptions.Timeout:
             return Response(
-                {"error": "gitlab_token_invalid", "details": "Timeout contacting GitLab API."},
-                status=status.HTTP_409_CONFLICT,
+                {"error": "gitlab_timeout", "details": "Timeout contacting GitLab API."},
+                status=status.HTTP_504_GATEWAY_TIMEOUT,
             )
         except requests.exceptions.RequestException:
             return Response(
-                {"error": "gitlab_token_invalid", "details": "Error contacting GitLab API."},
-                status=status.HTTP_409_CONFLICT,
+                {"error": "gitlab_unavailable", "details": "Error contacting GitLab API."},
+                status=status.HTTP_502_BAD_GATEWAY,
             )
 
+        return self._build_response(r)
+
+    @staticmethod
+    def _build_response(r):
         if r.status_code in (401, 403):
             return Response(
                 {"error": "gitlab_token_invalid", "details": r.json() if r.content else {}},
@@ -399,4 +403,3 @@ class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
         if "X-Total" in r.headers:
             response["X-Total"] = str(r.headers["X-Total"])
         return response
-
