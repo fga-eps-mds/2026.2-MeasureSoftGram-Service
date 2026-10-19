@@ -535,13 +535,7 @@ class ReleaseEndpointsTestCase(APITestCaseExpanded):
             product=self.product,
         )
 
-        # cálculo antigo de reliability, que deve ser substituído pelo mais recente
-        CalculatedCharacteristic.objects.create(
-            release_id=999,
-            characteristic=reliability,
-            repository=repository,
-            value=0.1,
-        )
+        # (repository, release, characteristic) é único: um cálculo por característica
         CalculatedCharacteristic.objects.create(
             release_id=999,
             characteristic=reliability,
