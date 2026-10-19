@@ -35,6 +35,13 @@ class ApiAccessTokenTests(TestCase):
     def test_access_token_is_stable_between_requests(self):
         self.assertEqual(self.fetch_access_token(), self.fetch_access_token())
 
+    def test_access_token_keeps_a_provided_key(self):
+        key = "a" * 40
+
+        token = ApiAccessToken.objects.create(user=self.user, key=key)
+
+        self.assertEqual(token.key, key)
+
     def test_access_token_keeps_working_after_logout(self):
         key = self.fetch_access_token()
 
