@@ -10,7 +10,7 @@ from release_configuration.views import (
     CurrentReleaseConfigModelViewSet,
     DefaultPreConfigModelViewSet,
 )
-from releases.views import ReleaseModelViewSet
+from releases.views import EntityAnalysisViewSet, ReleaseModelViewSet
 
 
 class ProductRouter(Router):
@@ -39,6 +39,11 @@ class ProductRouter(Router):
                     "name": "repositories-tsqmi-historical-values",
                     "view": RepositoriesTSQMIHistoryViewSet,
                     "basename": "repositories-tsqmi-historical-values",
+                },
+                {
+                    "name": "entity-analysis",
+                    "view": EntityAnalysisViewSet,
+                    "basename": "entity-analysis",
                 },
                 {
                     "name": "repositories",
