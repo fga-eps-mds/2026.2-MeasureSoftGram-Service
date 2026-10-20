@@ -52,10 +52,14 @@ def get_repository_distribution(repository, metric_key, release):
     da janela da release (CA7). Arquivos com ncloc = 0 ficam fora, como em
     MathModelServices._resolve_metric_params_in_memory.
     """
-    file_rows = CollectedMetric.objects.filter(repository=repository, qualifier="FIL")
-    # âncora: a última linha da coleta, de qualquer métrica, para que o ncloc gravado
-    # logo depois da métrica pedida (na mesma coleta) fique dentro da janela
-    anchor = latest_in_release_window(file_rows, release)
+    file_rows = CollectedMetric.objects.filter(repository=repository, qualifier="FIL", path__isnull=False)
+    # âncora: a linha mais recente entre a métrica pedida e o ncloc, para que o ncloc
+    # gravado logo depois da métrica (na mesma coleta) fique dentro da janela. Uma
+    # consulta por métrica usa o índice (repository, metric, -created_at).
+    latest_rows = [
+        latest_in_release_window(file_rows.filter(metric__key=key), release) for key in (metric_key, "ncloc")
+    ]
+    anchor = max((row for row in latest_rows if row is not None), key=lambda row: row.created_at, default=None)
     if anchor is None:
         return {"collected_at": None, "excluded_files": 0, "summary": None, "files": []}
 

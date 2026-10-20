@@ -113,3 +113,12 @@ class RepositoryDistributionTestCase(APITestCaseExpanded):
             result,
             {"collected_at": latest.created_at, "excluded_files": 0, "summary": None, "files": []},
         )
+
+    def test_ignores_file_rows_without_path(self):
+        at = self.now - timedelta(days=1)
+        self.collect("coverage", "src/a.py", 80.0, at)
+        self.collect("coverage", None, 10.0, at)
+
+        result = get_repository_distribution(self.repository, "coverage", self.release)
+
+        self.assertEqual(result["files"], [{"path": "src/a.py", "value": 80.0}])
