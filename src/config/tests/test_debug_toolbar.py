@@ -1,3 +1,4 @@
+import types
 from unittest import mock
 
 from django.test import RequestFactory, SimpleTestCase
@@ -26,3 +27,14 @@ class ShowToolbarForPagesTestCase(SimpleTestCase):
     def test_keeps_the_default_rule_for_html(self, _):
         # sem DEBUG ou fora dos IPs internos, a regra padrão do toolbar continua valendo
         self.assertFalse(show_toolbar_for_pages(self.request(BROWSER_ACCEPT)))
+
+    def test_uses_the_default_rule_of_the_toolbar(self):
+        # o módulo de verdade só importa com o debug_toolbar em INSTALLED_APPS (settings de dev)
+        default_rule = mock.Mock(return_value=True)
+        fake_middleware = types.SimpleNamespace(show_toolbar=default_rule)
+        request = self.request(BROWSER_ACCEPT)
+
+        with mock.patch.dict("sys.modules", {"debug_toolbar.middleware": fake_middleware}):
+            self.assertTrue(show_toolbar_for_pages(request))
+
+        default_rule.assert_called_once_with(request)
