@@ -158,3 +158,14 @@ class MetricDistributionEndpointTestCase(APITestCaseExpanded):
             [r["repository_id"] for r in response.json()["repositories"]],
             [self.api.id, self.web.id],
         )
+
+    def test_repositories_are_ordered_by_name(self):
+        first_by_name = self.get_repository(self.product, name="aaa")
+        self.release.repositories.add(first_by_name)
+
+        response = self.client.get(self.url, {"release_id": self.release.id, "metric": "coverage"})
+
+        self.assertEqual(
+            [r["repository_id"] for r in response.json()["repositories"]],
+            [first_by_name.id, self.api.id, self.web.id],
+        )

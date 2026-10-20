@@ -273,7 +273,7 @@ GET /api/v1/organizations/1/products/1/metrics-distribution/?release_id=1&metric
 Parâmetros:
 - `release_id` (obrigatório): release do produto. Usa a última coleta de cada repositório entre o dia de `start_at` e o dia de `end_at`, inclusive.
 - `metric` (obrigatório): `coverage`, `complexity`, `functions`, `comment_lines_density`, `duplicated_lines_density` ou `sqale_debt_ratio`. Outra métrica recebe 400.
-- `repository_id` (opcional): com ele, a resposta traz os arquivos (`files`) daquele repositório. Sem ele, traz só o resumo de cada repositório da release (ou do produto, se a release não tiver repositórios).
+- `repository_id` (opcional): com ele, a resposta traz os arquivos (`files`) daquele repositório. Sem ele, traz só o resumo de cada repositório da release (ou do produto, se a release não tiver repositórios), em ordem de nome.
 
 Erros: parâmetro obrigatório ausente ou métrica inválida recebe 400; release ou repositório fora do produto, ou usuário que não é membro da organização, recebe 404.
 

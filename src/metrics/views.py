@@ -11,6 +11,7 @@ from metrics.serializers import (
     SupportedMetricSerializer,
 )
 from organizations.mixins import UserScopedMixin
+from releases.entity_analysis import get_release_repositories
 from releases.models import Release
 
 
@@ -102,13 +103,11 @@ class MetricDistributionViewSet(UserScopedMixin, viewsets.ViewSet):
         repository_id = params.validated_data.get("repository_id")
         release = get_object_or_404(Release, id=params.validated_data["release_id"], product=product)
 
-        release_repositories = release.repositories.filter(product=product)
         if repository_id is not None:
             repositories = [get_object_or_404(product.repositories.all(), id=repository_id)]
-        elif release_repositories.exists():
-            repositories = release_repositories.order_by("id")
         else:
-            repositories = product.repositories.order_by("id")
+            # mesma seleção e ordem (nome) da Análise por Entidade
+            repositories = get_release_repositories(release)
 
         distributions = []
         for repository in repositories:
