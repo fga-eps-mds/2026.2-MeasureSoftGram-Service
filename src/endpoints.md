@@ -162,7 +162,7 @@ GET /api/v1/organizations/1/products/1/entity-analysis/?release_id=1&level=chara
 Parâmetros:
 - `release_id`: release do produto (obrigatório).
 - `level`: `characteristic`, `subcharacteristic`, `measure` ou `metric`.
-- `key`: chave da entidade. Precisa fazer parte da pré-configuração vigente na release (a última criada até o `end_at`); se não fizer, responde 404.
+- `key`: chave da entidade. Precisa fazer parte da pré-configuração vigente na release, senão responde 404. Vale a mesma regra da árvore do modelo (TASK21.01.01): a mais recente criada até o `end_at` ou, se nenhuma foi criada até lá, a mais antiga do produto.
 
 Regra do valor: o último calculado (ou coletado, para métricas) entre o dia de `start_at` e o dia de `end_at` da release, ambos inclusive, a mesma do gráfico de pulso do TSQMI. Repositório sem valor na janela vem com `value: null`. Métricas usam o valor bruto no nível do projeto (`qualifier = TRK`). Os repositórios são os da release; se ela não tiver nenhum, todos os do produto.
 

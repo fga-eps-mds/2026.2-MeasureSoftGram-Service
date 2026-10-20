@@ -3,8 +3,6 @@ Análise por entidade (US21.02): compara os repositórios de um produto em uma
 entidade do modelo de qualidade, dentro de uma release.
 """
 
-from django.utils import timezone
-
 from characteristics.models import CalculatedCharacteristic, SupportedCharacteristic
 from measures.models import CalculatedMeasure, SupportedMeasure
 from metrics.models import CollectedMetric, SupportedMetric
@@ -35,12 +33,14 @@ CHILD_LEVEL = {
 
 def get_release_configuration(release: Release):
     """
-    Pré-configuração vigente na release: a última criada até o fim da release.
-    Se o produto só ganhou configuração depois, usa a atual.
+    Pré-configuração vigente na release: a mais recente criada até o `end_at`. Se nenhuma foi
+    criada até lá, usa a mais antiga do produto. É a mesma regra da árvore do modelo (TASK21.01.01),
+    para os dashboards do épico mostrarem a mesma configuração para a mesma release.
     """
     configurations = release.product.release_configuration.all()
-    end_date = timezone.localtime(release.end_at).date()
-    return configurations.filter(created_at__date__lte=end_date).first() or configurations.first()
+    return (
+        configurations.filter(created_at__lte=release.end_at).first() or configurations.order_by("created_at").first()
+    )
 
 
 def get_configured_entities(configuration) -> dict:

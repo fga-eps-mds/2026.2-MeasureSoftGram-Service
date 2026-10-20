@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
@@ -270,20 +270,31 @@ class EntityAnalysisEndpointTestCase(APITestCaseExpanded):
 
         self.assertEqual(response.status_code, 400)
 
-    def test_uses_configuration_in_force_at_the_end_of_the_release(self):
-        # a configuração padrão do produto foi criada agora, depois da release; esta vale no último dia dela
+    def configuration_without_functional_suitability(self, created_at):
         data = copy.deepcopy(DEFAULT_PRE_CONFIG)
         data["characteristics"] = [c for c in data["characteristics"] if c["key"] != "functional_suitability"]
         data["characteristics"][0]["weight"] = 50
         data["characteristics"][1]["weight"] = 50
-        ReleaseConfiguration.objects.create(
+        return ReleaseConfiguration.objects.create(
             product=self.product,
-            name="Configuração da v1.0",
+            name="Configuração sem functional_suitability",
             data=data,
-            created_at=local_datetime(2026, 3, 31, 18, 0),
+            created_at=created_at,
         )
 
+    def characteristic_keys_of_release(self):
         entities = self.client.get(f"{self.url}entities/", {"release_id": self.release.id}).json()
+        return [item["key"] for item in entities["characteristic"]]
 
-        self.assertEqual([item["key"] for item in entities["characteristic"]], ["reliability", "maintainability"])
+    def test_uses_latest_configuration_created_until_release_end(self):
+        # a configuração padrão do produto foi criada agora, depois da release
+        self.configuration_without_functional_suitability(local_datetime(2026, 3, 20))
+
+        self.assertEqual(self.characteristic_keys_of_release(), ["reliability", "maintainability"])
         self.assertEqual(self.get("characteristic", "functional_suitability").status_code, 404)
+
+    def test_falls_back_to_oldest_configuration_when_none_existed_until_release_end(self):
+        # as duas configurações são posteriores à release: vale a mais antiga, a padrão criada com o produto
+        self.configuration_without_functional_suitability(timezone.now() + timedelta(days=1))
+
+        self.assertIn("functional_suitability", self.characteristic_keys_of_release())
