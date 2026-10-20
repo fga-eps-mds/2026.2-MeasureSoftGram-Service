@@ -133,3 +133,24 @@ GET /api/v1/orgs/1/repositories/1/tsqmi/history
 
 #### Endpoint que retorna o valor atual do tsqmi e de seus componentes
 GET /api/v1/orgs/1/repositories/1/tsqmi/tree/
+
+
+## Endpoints da árvore do modelo de qualidade (Metamodelo)
+
+#### Retorna a árvore hierárquica do modelo de qualidade por release (ou atual)
+Retorna a árvore TSQMI → características → subcaracterísticas → medidas → métricas da release especificada com pesos, descrições e valores de referência das medidas (`min_threshold` e `max_threshold`).
+Caso o parâmetro `release_id` não seja informado via query string, retorna a árvore da configuração atual do produto.
+
+- **URL:** `GET /api/v1/organizations/{organization_id}/products/{product_id}/quality-model-tree/`
+- **Query Params:**
+  - `release_id` *(opcional, inteiro)*: ID da release da qual se deseja obter a árvore do modelo. Caso ausente, utiliza a configuração vigente do produto.
+- **Regra de resolução da configuração:**
+  1. Se `release_id` informado: seleciona a `ReleaseConfiguration` mais recente do produto com `created_at <= release.end_at`.
+  2. Fallback: caso nenhuma configuração satisfaça a condição (ex: release com datas anteriores), seleciona a configuração mais antiga do produto.
+  3. Se `release_id` omitido: seleciona a configuração atual (`product.release_configuration.first()`).
+- **Respostas:**
+  - `200 OK`: Lista com o nó raiz `tsqmi` e seus descendentes. Caso o produto não possua configuração cadastrada, retorna lista vazia `[]`.
+  - `400 Bad Request`: `release_id` informado não é um número inteiro válido.
+  - `401 Unauthorized`: Usuário não autenticado.
+  - `404 Not Found`: Organização/produto não encontrado, usuário não é membro da organização, ou `release_id` não pertence ao produto.
+
