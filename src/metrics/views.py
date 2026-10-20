@@ -102,10 +102,11 @@ class MetricDistributionViewSet(UserScopedMixin, viewsets.ViewSet):
         repository_id = params.validated_data.get("repository_id")
         release = get_object_or_404(Release, id=params.validated_data["release_id"], product=product)
 
+        release_repositories = release.repositories.filter(product=product)
         if repository_id is not None:
             repositories = [get_object_or_404(product.repositories.all(), id=repository_id)]
-        elif release.repositories.exists():
-            repositories = release.repositories.order_by("id")
+        elif release_repositories.exists():
+            repositories = release_repositories.order_by("id")
         else:
             repositories = product.repositories.order_by("id")
 

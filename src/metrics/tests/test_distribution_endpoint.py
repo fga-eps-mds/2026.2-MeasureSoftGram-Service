@@ -145,3 +145,16 @@ class MetricDistributionEndpointTestCase(APITestCaseExpanded):
         response = APIClient().get(self.url, {"release_id": self.release.id, "metric": "coverage"})
 
         self.assertEqual(response.status_code, 401)
+
+    def test_ignores_release_repositories_from_another_product(self):
+        other_org = self.get_organization(name="Outra organização", add_user=False)
+        foreign = self.get_repository(self.get_product(other_org, name="Alheio"), name="alheio")
+        self.release.repositories.add(foreign)
+
+        response = self.client.get(self.url, {"release_id": self.release.id, "metric": "coverage"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [r["repository_id"] for r in response.json()["repositories"]],
+            [self.api.id, self.web.id],
+        )
