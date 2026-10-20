@@ -1,7 +1,7 @@
 from datetime import timedelta
 from statistics import fmean, pstdev, quantiles
 
-from metrics.models import CollectedMetric
+from metrics.models import CollectedMetric, SupportedMetric
 from releases.window import latest_in_release_window
 
 # As linhas de uma coleta têm created_at um pouco diferentes (cada CollectedMetric
@@ -78,3 +78,36 @@ def get_repository_distribution(repository, metric_key, release):
         "summary": summarize([file["value"] for file in files]),
         "files": files,
     }
+
+
+def _release_configuration(product, release):
+    return (
+        product.release_configuration.filter(created_at__lte=release.end_at).first()
+        or product.release_configuration.first()
+    )
+
+
+def get_metric_reference(product, release, metric_key):
+    """
+    Mínimo e máximo da medida que usa a métrica, na configuração vigente ao
+    fim da release (CA4). None quando nenhuma medida da configuração usa a
+    métrica com os dois thresholds.
+    """
+    config = _release_configuration(product, release)
+    if config is None:
+        return None
+
+    # relação reversa em vez de SupportedMeasure.objects.filter: o CacheManager
+    # compara kwargs string como conjunto de letras
+    measure_keys = set(SupportedMetric.objects.get(key=metric_key).related_measures.values_list("key", flat=True))
+
+    for characteristic in config.data["characteristics"]:
+        for subcharacteristic in characteristic["subcharacteristics"]:
+            for measure in subcharacteristic["measures"]:
+                if measure["key"] in measure_keys and "min_threshold" in measure and "max_threshold" in measure:
+                    return {
+                        "measure": measure["key"],
+                        "min_threshold": measure["min_threshold"],
+                        "max_threshold": measure["max_threshold"],
+                    }
+    return None
