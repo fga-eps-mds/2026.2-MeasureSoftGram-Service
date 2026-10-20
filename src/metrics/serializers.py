@@ -3,6 +3,7 @@ from django.urls import reverse_lazy
 from django.utils.dateparse import parse_date
 from rest_framework import serializers
 
+import utils
 from metrics.models import CollectedMetric, SupportedMetric
 
 
@@ -96,6 +97,7 @@ class CollectedMetricHistorySerializer(serializers.ModelSerializer):
         MAX = settings.MAXIMUM_NUMBER_OF_HISTORICAL_RECORDS
         start_at = self.context.get("start_at")
         end_at = self.context.get("end_at")
+        qualifier = self.context.get("qualifier")
 
         # Parse dates
         start_date = parse_date(start_at) if start_at else None
@@ -103,6 +105,9 @@ class CollectedMetricHistorySerializer(serializers.ModelSerializer):
         try:
             qs = obj.collected_metrics.all()
 
+            # qualifier=TRK deixa só o valor do repositório, sem os valores por arquivo
+            if qualifier:
+                qs = qs.filter(qualifier=qualifier)
             if start_date:
                 qs = qs.filter(created_at__gte=start_date)
             if end_date:
@@ -111,8 +116,7 @@ class CollectedMetricHistorySerializer(serializers.ModelSerializer):
             repository = self.context["view"].get_repository()
             qs = qs.filter(repository=repository)
 
-            # os MAX mais recentes, em ordem cronológica
-            return CollectedMetricSerializer(list(qs[:MAX])[::-1], many=True).data
+            return CollectedMetricSerializer(utils.get_latest_history(qs, MAX), many=True).data
 
         except SupportedMetric.DoesNotExist:
             return None

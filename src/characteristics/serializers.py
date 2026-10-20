@@ -1,6 +1,7 @@
 from django.conf import settings
 from rest_framework import serializers
 
+import utils
 from characteristics.models import BalanceMatrix, CalculatedCharacteristic, SupportedCharacteristic
 
 
@@ -106,9 +107,8 @@ class CalculatedCharacteristicHistorySerializer(serializers.ModelSerializer):
             repository = self.context["view"].get_repository()
             qs = qs.filter(repository=repository)
 
-            # os MAX mais recentes, em ordem cronológica
             return CalculatedCharacteristicSerializer(
-                list(qs[:MAX])[::-1],
+                utils.get_latest_history(qs, MAX),
                 many=True,
             ).data
 
