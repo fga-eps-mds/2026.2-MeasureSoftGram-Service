@@ -61,6 +61,10 @@ GET /api/v1/orgs/1/repositories/1/metrics/1/ OK
 #### Endpoint que retorna uma lista com o histórico de valores de uma métrica de um projeto
 GET /api/v1/orgs/1/repositories/1/history/metrics/1/ OK
 
+O histórico de métricas aceita `?qualifier=TRK` para trazer só o valor do repositório, sem os valores por arquivo (`FIL`, `UTS`), e `?start_at=`/`?end_at=` para filtrar por data.
+
+Em todos os históricos (métricas, medidas, subcaracterísticas, características e TSQMI) vêm os `MAXIMUM_NUMBER_OF_HISTORICAL_RECORDS` registros **mais recentes** (padrão 100), ordenados do mais antigo para o mais novo.
+
 #### Endpoint que retorna o valor atual das metrics e de seus componentes
 GET /api/v1/orgs/1/repositories/1/tree/metrics/
 
