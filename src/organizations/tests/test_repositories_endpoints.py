@@ -569,4 +569,3 @@ class OnboardRepositoryTestCase(APITestCaseExpanded):
             url="https://gitlab.com/my-group/my-subgroup/my-repo",
         )
         self.assertEqual(repo.gitlab_path_with_namespace, "my-group/my-subgroup/my-repo")
-
