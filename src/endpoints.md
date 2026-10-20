@@ -275,6 +275,8 @@ Parâmetros:
 - `metric` (obrigatório): `coverage`, `complexity`, `functions`, `comment_lines_density`, `duplicated_lines_density` ou `sqale_debt_ratio`. Outra métrica recebe 400.
 - `repository_id` (opcional): com ele, a resposta traz os arquivos (`files`) daquele repositório. Sem ele, traz só o resumo de cada repositório da release (ou do produto, se a release não tiver repositórios).
 
+Erros: parâmetro obrigatório ausente ou métrica inválida recebe 400; release ou repositório fora do produto, ou usuário que não é membro da organização, recebe 404.
+
 Arquivos com `ncloc = 0` ficam fora; `excluded_files` diz quantos. `reference` traz o mínimo e o máximo da medida que usa a métrica, ou `null`. Repositório sem dados por arquivo na release vem com `files: []`, `summary: null` e `collected_at: null`. Se a última coleta da release não tiver a métrica pedida, vem com `files: []` e `summary: null`, mas com `collected_at` preenchido.
 
 ```json
