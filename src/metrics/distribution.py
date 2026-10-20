@@ -53,7 +53,9 @@ def get_repository_distribution(repository, metric_key, release):
     MathModelServices._resolve_metric_params_in_memory.
     """
     file_rows = CollectedMetric.objects.filter(repository=repository, qualifier="FIL")
-    anchor = latest_in_release_window(file_rows.filter(metric__key=metric_key), release)
+    # âncora: a última linha da coleta, de qualquer métrica, para que o ncloc gravado
+    # logo depois da métrica pedida (na mesma coleta) fique dentro da janela
+    anchor = latest_in_release_window(file_rows, release)
     if anchor is None:
         return {"collected_at": None, "excluded_files": 0, "summary": None, "files": []}
 

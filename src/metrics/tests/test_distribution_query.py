@@ -90,3 +90,26 @@ class RepositoryDistributionTestCase(APITestCaseExpanded):
             result,
             {"collected_at": None, "excluded_files": 0, "summary": None, "files": []},
         )
+
+    def test_includes_ncloc_written_right_after_the_metric(self):
+        at = self.now - timedelta(days=1)
+        self.collect("coverage", "src/a.py", 80.0, at)
+        self.collect("coverage", "src/b.py", 0.0, at)
+        self.collect("ncloc", "src/a.py", 120, at + timedelta(microseconds=1))
+        self.collect("ncloc", "src/b.py", 0, at + timedelta(microseconds=2))
+
+        result = get_repository_distribution(self.repository, "coverage", self.release)
+
+        self.assertEqual(result["files"], [{"path": "src/a.py", "value": 80.0}])
+        self.assertEqual(result["excluded_files"], 1)
+
+    def test_latest_collection_without_the_metric_has_no_files(self):
+        self.collect("coverage", "src/a.py", 80.0, self.now - timedelta(days=3))
+        latest = self.collect("ncloc", "src/a.py", 120, self.now - timedelta(days=1))
+
+        result = get_repository_distribution(self.repository, "coverage", self.release)
+
+        self.assertEqual(
+            result,
+            {"collected_at": latest.created_at, "excluded_files": 0, "summary": None, "files": []},
+        )
