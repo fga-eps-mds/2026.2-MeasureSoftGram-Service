@@ -10,7 +10,7 @@ help:
 	@echo "  env          - copia env-vars-example -> env-vars (nao sobrescreve)"
 	@echo "  setup        - do zero a stack de pe: env-vars + build + up + espera health"
 	@echo "  dev          - sobe a stack com hot-reload (docker compose up --watch)"
-	@echo "  seed         - popula dados (load_initial_data + seed_grafana)"
+	@echo "  seed         - popula dados (load_initial_data + seed_demo_data)"
 	@echo "  up           - sobe a stack em background"
 	@echo "  down         - derruba a stack"
 	@echo "  restart      - reinicia todos os services"
@@ -62,7 +62,7 @@ dev:
 # Popula as entidades suportadas e provisiona os dashboards do Grafana.
 seed:
 	$(COMPOSE) exec service python manage.py load_initial_data
-	$(COMPOSE) exec service python manage.py seed_grafana
+	$(COMPOSE) exec service python manage.py seed_demo_data
 
 # --- Lifecycle --------------------------------------------------------------
 

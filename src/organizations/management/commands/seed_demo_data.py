@@ -1,5 +1,5 @@
 """
-Management command: seed_grafana
+Management command: seed_demo_data
 
 Popula o banco com dados ricos para os dashboards do produto:
   - 180 dias de histórico diário para cada entidade do modelo
@@ -17,10 +17,10 @@ IMPORTANTE: Este seed popula dados para os seguintes dashboards:
   4. Evolução das características na tela do repositório
 
 Uso:
-    python manage.py seed_grafana
-    python manage.py seed_grafana --days 365
-    python manage.py seed_grafana --repos "MeasureSoftGram-Service,MeasureSoftGram-Front"
-    python manage.py seed_grafana --clean-all  # Limpa e recria todos os dados
+    python manage.py seed_demo_data
+    python manage.py seed_demo_data --days 365
+    python manage.py seed_demo_data --repos "MeasureSoftGram-Service,MeasureSoftGram-Front"
+    python manage.py seed_demo_data --clean-all  # Limpa e recria todos os dados
 """
 
 import datetime as dt
@@ -160,7 +160,7 @@ class Command(BaseCommand):
         self.stdout.write("")
         self._seed_goals_and_releases()
 
-        self.stdout.write(self.style.SUCCESS("✓ seed_grafana concluído."))
+        self.stdout.write(self.style.SUCCESS("✓ seed_demo_data concluído."))
 
     # ------------------------------------------------------------------
     # Por repositório

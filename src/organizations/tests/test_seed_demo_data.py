@@ -10,7 +10,7 @@ from metrics.models import CollectedMetric
 from tsqmi.models import TSQMI
 from utils.tests import APITestCaseExpanded
 
-COMMAND = "seed_grafana"
+COMMAND = "seed_demo_data"
 
 
 class SeedDemoDataTestCase(APITestCaseExpanded):
