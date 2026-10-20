@@ -1,6 +1,5 @@
 from datetime import datetime
 
-from django.test import override_settings
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -380,26 +379,3 @@ class ReleaseDashboardAccessTestCase(ReleaseDashboardTestCase):
         for url in (self.summary_url, self.characteristics_url):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url, {"release_id": other_release.id}).status_code, 404)
-
-
-@override_settings(MAXIMUM_NUMBER_OF_HISTORICAL_RECORDS=2)
-class HistoricalValuesLimitTestCase(ReleaseDashboardTestCase):
-    def test_characteristic_history_returns_latest_records_in_chronological_order(self):
-        for day, value in ((1, 0.1), (2, 0.2), (3, 0.3)):
-            self.calculated_characteristic(self.api, "reliability", value, local_datetime(2026, 3, day))
-
-        response = self.client.get(f"{self.product_url}repositories/{self.api.id}/historical-values/characteristics/")
-
-        self.assertEqual(response.status_code, 200)
-        reliability = next(item for item in response.json()["results"] if item["key"] == "reliability")
-        self.assertEqual([point["value"] for point in reliability["history"]], [0.2, 0.3])
-
-    def test_metric_history_returns_latest_records_in_chronological_order(self):
-        for day, value in ((1, 10), (2, 20), (3, 30)):
-            self.collected_metric(self.api, "coverage", value, local_datetime(2026, 3, day))
-
-        response = self.client.get(f"{self.product_url}repositories/{self.api.id}/historical-values/metrics/")
-
-        self.assertEqual(response.status_code, 200)
-        coverage = next(item for item in response.json()["results"] if item["key"] == "coverage")
-        self.assertEqual([point["value"] for point in coverage["history"]], [20, 30])

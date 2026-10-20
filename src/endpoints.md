@@ -264,5 +264,3 @@ Entram as releases do produto que incluem o repositório pela mesma regra (inclu
 ```
 
 Respostas: `400` com `level` inválido, `404` se o repositório não for do produto ou o usuário não for membro da organização.
-
-> Os endpoints `historical-values/*` agora devolvem os `MAXIMUM_NUMBER_OF_HISTORICAL_RECORDS` registros **mais recentes** (em ordem cronológica). Antes devolviam os mais antigos, e as análises recentes sumiam em repositórios com muitas coletas.
