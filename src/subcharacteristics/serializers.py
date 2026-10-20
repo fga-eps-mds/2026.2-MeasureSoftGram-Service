@@ -84,10 +84,10 @@ class CalculatedSubCharacteristicHistorySerializer(serializers.ModelSerializer):
 
             repository = self.context["view"].get_repository()
             qs = qs.filter(repository=repository)
-            qs = qs.reverse()
 
+            # os MAX mais recentes, em ordem cronológica
             return CalculatedSubCharacteristicSerializer(
-                qs[:MAX],
+                list(qs[:MAX])[::-1],
                 many=True,
             ).data
         except CalculatedSubCharacteristic.DoesNotExist:

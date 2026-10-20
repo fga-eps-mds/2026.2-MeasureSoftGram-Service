@@ -101,7 +101,6 @@ class CollectedMetricHistorySerializer(serializers.ModelSerializer):
         start_date = parse_date(start_at) if start_at else None
         end_date = parse_date(end_at) if end_at else None
         try:
-            # Os últimos MAX registros criados em ordem decrescente
             qs = obj.collected_metrics.all()
 
             if start_date:
@@ -111,9 +110,9 @@ class CollectedMetricHistorySerializer(serializers.ModelSerializer):
 
             repository = self.context["view"].get_repository()
             qs = qs.filter(repository=repository)
-            qs = qs.reverse()
 
-            return CollectedMetricSerializer(qs[:MAX], many=True).data
+            # os MAX mais recentes, em ordem cronológica
+            return CollectedMetricSerializer(list(qs[:MAX])[::-1], many=True).data
 
         except SupportedMetric.DoesNotExist:
             return None

@@ -500,7 +500,8 @@ class RepositoriesTSQMIHistorySerializer(serializers.ModelSerializer):
         MAX = settings.MAXIMUM_NUMBER_OF_HISTORICAL_RECORDS
 
         try:
-            qs = obj.calculated_tsqmis.all().reverse()[:MAX]
-            return TSQMISerializer(qs, many=True).data
+            # os MAX mais recentes, em ordem cronológica
+            qs = obj.calculated_tsqmis.all()[:MAX]
+            return TSQMISerializer(list(qs)[::-1], many=True).data
         except TSQMI.DoesNotExist:
             return None

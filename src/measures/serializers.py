@@ -79,13 +79,12 @@ class CalculatedMeasureHistorySerializer(serializers.ModelSerializer):
     def get_history(self, obj: SupportedMeasure):
         MAX = settings.MAXIMUM_NUMBER_OF_HISTORICAL_RECORDS
         try:
-            # Os últimos 10 registros criados em ordem decrescente
             qs = obj.calculated_measures.all()
 
             repository = self.context["view"].get_repository()
             qs = qs.filter(repository=repository)
-            qs = qs.reverse()
 
-            return CalculatedMeasureSerializer(qs[:MAX], many=True).data
+            # os MAX mais recentes, em ordem cronológica
+            return CalculatedMeasureSerializer(list(qs[:MAX])[::-1], many=True).data
         except CalculatedMeasure.DoesNotExist:
             return None
