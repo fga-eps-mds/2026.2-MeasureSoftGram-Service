@@ -1,4 +1,13 @@
+from datetime import timedelta
 from statistics import fmean, pstdev, quantiles
+
+from metrics.models import CollectedMetric
+from releases.window import latest_in_release_window
+
+# As linhas de uma coleta têm created_at um pouco diferentes (cada CollectedMetric
+# recebe o próprio timezone.now()). Mesma tolerância de
+# SupportedMetric.get_latest_metric_values (metrics/models.py:113).
+COLLECTION_TOLERANCE = timedelta(minutes=20)
 
 
 def summarize(values):
@@ -27,4 +36,43 @@ def summarize(values):
         "max": ordered[-1],
         "mean": fmean(ordered),
         "std_dev": pstdev(ordered),
+    }
+
+
+def _latest_value_by_path(queryset):
+    values = {}
+    for path, value in queryset.order_by("-created_at").values_list("path", "value"):
+        values.setdefault(path, value)
+    return values
+
+
+def get_repository_distribution(repository, metric_key, release):
+    """
+    Valores por arquivo de uma métrica na última coleta do repositório dentro
+    da janela da release (CA7). Arquivos com ncloc = 0 ficam fora, como em
+    MathModelServices._resolve_metric_params_in_memory.
+    """
+    file_rows = CollectedMetric.objects.filter(repository=repository, qualifier="FIL")
+    anchor = latest_in_release_window(file_rows.filter(metric__key=metric_key), release)
+    if anchor is None:
+        return {"collected_at": None, "excluded_files": 0, "summary": None, "files": []}
+
+    collection = file_rows.filter(
+        created_at__gte=max(anchor.created_at - COLLECTION_TOLERANCE, release.start_at),
+        created_at__lte=anchor.created_at,
+    )
+    ncloc_by_path = _latest_value_by_path(collection.filter(metric__key="ncloc"))
+    empty_paths = {path for path, ncloc in ncloc_by_path.items() if ncloc == 0}
+    value_by_path = _latest_value_by_path(collection.filter(metric__key=metric_key))
+
+    files = [
+        {"path": path, "value": value}
+        for path, value in sorted(value_by_path.items())
+        if path not in empty_paths
+    ]
+    return {
+        "collected_at": anchor.created_at,
+        "excluded_files": len(value_by_path) - len(files),
+        "summary": summarize([file["value"] for file in files]),
+        "files": files,
     }
