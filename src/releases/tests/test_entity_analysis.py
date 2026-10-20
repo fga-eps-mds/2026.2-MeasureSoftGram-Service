@@ -284,7 +284,42 @@ class EntityAnalysisEndpointTestCase(APITestCaseExpanded):
             ["reliability", "maintainability", "functional_suitability"],
         )
         self.assertIn({"key": "test_coverage", "name": "Test Coverage"}, data["measure"])
-        self.assertIn("coverage", [item["key"] for item in data["metric"]])
+
+    def entity_keys(self, level):
+        entities = self.client.get(f"{self.url}entities/", {"release_id": self.release.id}).json()
+        return [item["key"] for item in entities[level]]
+
+    def test_entities_lists_only_metrics_with_repository_level_value(self):
+        # GitHub grava no nível do projeto (TRK); o SonarQube, por arquivo (FIL)
+        self.collected_metric(self.api, "total_builds", 12, local_datetime(2026, 3, 15))
+        self.collected_metric(self.api, "coverage", 80.0, local_datetime(2026, 3, 15), qualifier="FIL", path="a.py")
+
+        self.assertEqual(self.entity_keys("metric"), ["total_builds"])
+
+    def test_entities_lists_metric_with_repository_level_value_outside_the_release_window(self):
+        self.collected_metric(self.web, "total_builds", 12, local_datetime(2025, 1, 10))
+
+        self.assertEqual(self.entity_keys("metric"), ["total_builds"])
+
+    def test_entities_ignores_metrics_of_repositories_outside_the_product(self):
+        other_org = self.get_organization(name="Other Organization", add_user=False)
+        foreign = self.get_repository(self.get_product(other_org, name="Other Product"), name="foreign")
+        self.collected_metric(foreign, "total_builds", 12, local_datetime(2026, 3, 15))
+
+        self.assertEqual(self.entity_keys("metric"), [])
+
+    def test_metric_without_repository_level_value_returns_400(self):
+        self.collected_metric(self.api, "coverage", 80.0, local_datetime(2026, 3, 15), qualifier="FIL", path="a.py")
+
+        response = self.get("metric", "coverage")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "Esta métrica não tem valor por repositório.")
+
+    def test_metric_outside_release_configuration_still_returns_404(self):
+        self.collected_metric(self.api, "ncloc", 1000, local_datetime(2026, 3, 15))
+
+        self.assertEqual(self.get("metric", "ncloc").status_code, 404)
 
     def test_entities_requires_release(self):
         response = self.client.get(f"{self.url}entities/")
