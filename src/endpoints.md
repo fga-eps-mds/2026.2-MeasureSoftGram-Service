@@ -271,7 +271,7 @@ Respostas: `400` com `level` inválido, `404` se o repositório não for do prod
 GET /api/v1/organizations/1/products/1/metrics-distribution/?release_id=1&metric=coverage&repository_id=1
 
 Parâmetros:
-- `release_id` (obrigatório): release do produto. Usa a última coleta de cada repositório entre `start_at` e `end_at`.
+- `release_id` (obrigatório): release do produto. Usa a última coleta de cada repositório entre o dia de `start_at` e o dia de `end_at`, inclusive.
 - `metric` (obrigatório): `coverage`, `complexity`, `functions`, `comment_lines_density`, `duplicated_lines_density` ou `sqale_debt_ratio`. Outra métrica recebe 400.
 - `repository_id` (opcional): com ele, a resposta traz os arquivos (`files`) daquele repositório. Sem ele, traz só o resumo de cada repositório da release (ou do produto, se a release não tiver repositórios).
 

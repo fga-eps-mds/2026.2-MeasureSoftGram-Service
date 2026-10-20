@@ -1,8 +1,9 @@
 from datetime import timedelta
 from statistics import fmean, pstdev, quantiles
 
+from entity_trees.services import resolve_release_configuration
 from metrics.models import CollectedMetric, SupportedMetric
-from releases.window import latest_in_release_window
+from releases.service import filter_release_window
 
 # As linhas de uma coleta têm created_at um pouco diferentes (cada CollectedMetric
 # recebe o próprio timezone.now()). Mesma tolerância de
@@ -46,10 +47,14 @@ def _latest_value_by_path(queryset):
     return values
 
 
+def _latest_in_release_window(queryset, release):
+    return filter_release_window(queryset, release).order_by("-created_at", "-id").first()
+
+
 def get_repository_distribution(repository, metric_key, release):
     """
     Valores por arquivo de uma métrica na última coleta do repositório dentro
-    da janela da release (CA7). Arquivos com ncloc = 0 ficam fora, como em
+    da janela da release, de dia a dia (CA7). Arquivos com ncloc = 0 ficam fora, como em
     MathModelServices._resolve_metric_params_in_memory.
     """
     file_rows = CollectedMetric.objects.filter(repository=repository, qualifier="FIL", path__isnull=False)
@@ -57,14 +62,14 @@ def get_repository_distribution(repository, metric_key, release):
     # gravado logo depois da métrica (na mesma coleta) fique dentro da janela. Uma
     # consulta por métrica usa o índice (repository, metric, -created_at).
     latest_rows = [
-        latest_in_release_window(file_rows.filter(metric__key=key), release) for key in (metric_key, "ncloc")
+        _latest_in_release_window(file_rows.filter(metric__key=key), release) for key in (metric_key, "ncloc")
     ]
     anchor = max((row for row in latest_rows if row is not None), key=lambda row: row.created_at, default=None)
     if anchor is None:
         return {"collected_at": None, "excluded_files": 0, "summary": None, "files": []}
 
-    collection = file_rows.filter(
-        created_at__gte=max(anchor.created_at - COLLECTION_TOLERANCE, release.start_at),
+    collection = filter_release_window(file_rows, release).filter(
+        created_at__gte=anchor.created_at - COLLECTION_TOLERANCE,
         created_at__lte=anchor.created_at,
     )
     ncloc_by_path = _latest_value_by_path(collection.filter(metric__key="ncloc"))
@@ -84,20 +89,13 @@ def get_repository_distribution(repository, metric_key, release):
     }
 
 
-def _release_configuration(product, release):
-    return (
-        product.release_configuration.filter(created_at__lte=release.end_at).first()
-        or product.release_configuration.first()
-    )
-
-
 def get_metric_reference(product, release, metric_key):
     """
     Mínimo e máximo da medida que usa a métrica, na configuração vigente ao
     fim da release (CA4). None quando nenhuma medida da configuração usa a
     métrica com os dois thresholds.
     """
-    config = _release_configuration(product, release)
+    config = resolve_release_configuration(product, release)
     if config is None:
         return None
 

@@ -122,3 +122,13 @@ class RepositoryDistributionTestCase(APITestCaseExpanded):
         result = get_repository_distribution(self.repository, "coverage", self.release)
 
         self.assertEqual(result["files"], [{"path": "src/a.py", "value": 80.0}])
+
+    def test_includes_collection_on_last_day_of_release(self):
+        end_day = timezone.localtime(self.now).replace(hour=0, minute=0, second=0, microsecond=0)
+        self.release.end_at = end_day
+        self.release.save()
+        self.collect("coverage", "src/a.py", 80.0, end_day + timedelta(hours=15))
+
+        result = get_repository_distribution(self.repository, "coverage", self.release)
+
+        self.assertEqual(result["files"], [{"path": "src/a.py", "value": 80.0}])

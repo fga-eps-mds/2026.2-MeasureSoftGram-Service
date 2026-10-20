@@ -71,3 +71,22 @@ class MetricReferenceTestCase(APITestCaseExpanded):
         reference = get_metric_reference(self.product, self.release, "coverage")
 
         self.assertEqual(reference["min_threshold"], 60)
+
+    def test_falls_back_to_oldest_configuration_when_none_precedes_release_end(self):
+        past_release = Release.objects.create(
+            release_name="R0",
+            start_at=self.now - timedelta(days=30),
+            end_at=self.now - timedelta(days=20),
+            created_by=self.user,
+            product=self.product,
+            goal=self.goal,
+        )
+        ReleaseConfiguration.objects.create(
+            product=self.product,
+            name="Mais nova",
+            data=config_with_test_coverage(min_threshold=70, max_threshold=100),
+        )
+
+        reference = get_metric_reference(self.product, past_release, "coverage")
+
+        self.assertEqual(reference["min_threshold"], 60)
