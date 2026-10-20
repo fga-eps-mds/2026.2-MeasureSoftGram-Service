@@ -37,5 +37,4 @@ jobs:
         run: |
           docker exec msgram_service python manage.py seed_grafana \
             --days 180 --clean-tsqmi --clean-all \
-            --repos "2019.2-Acacia,2019.2-Acacia-Frontend,2020.1-BCE,2021.1_G01_Animalesco_BackEnd,2021.1_G01_Animalesco_FrontEnd,2022-1-MeasureSoftGram-Service,2022-1-MeasureSoftGram-Core,2022-1-MeasureSoftGram-Front,2022-1-MeasureSoftGram-CLI" \
-            --grafana-url http://grafana:3000
+            --repos "2019.2-Acacia,2019.2-Acacia-Frontend,2020.1-BCE,2021.1_G01_Animalesco_BackEnd,2021.1_G01_Animalesco_FrontEnd,2022-1-MeasureSoftGram-Service,2022-1-MeasureSoftGram-Core,2022-1-MeasureSoftGram-Front,2022-1-MeasureSoftGram-CLI"
