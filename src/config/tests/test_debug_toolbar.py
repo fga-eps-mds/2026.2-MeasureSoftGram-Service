@@ -1,4 +1,6 @@
-from django.test import RequestFactory, SimpleTestCase, override_settings
+from unittest import mock
+
+from django.test import RequestFactory, SimpleTestCase
 
 from config.debug_toolbar import show_toolbar_for_pages
 
@@ -6,17 +8,21 @@ AXIOS_ACCEPT = "application/json, text/plain, */*"
 BROWSER_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 
 
-@override_settings(DEBUG=True, INTERNAL_IPS=["127.0.0.1"])
 class ShowToolbarForPagesTestCase(SimpleTestCase):
     def request(self, accept):
-        return RequestFactory().get("/api/v1/organizations/", HTTP_ACCEPT=accept, REMOTE_ADDR="127.0.0.1")
+        return RequestFactory().get("/api/v1/organizations/", HTTP_ACCEPT=accept)
 
-    def test_shows_on_html_pages(self):
+    @mock.patch("config.debug_toolbar._default_show_toolbar", return_value=True)
+    def test_shows_on_html_pages(self, _):
         self.assertTrue(show_toolbar_for_pages(self.request(BROWSER_ACCEPT)))
 
-    def test_skips_json_calls_from_the_front(self):
+    @mock.patch("config.debug_toolbar._default_show_toolbar", return_value=True)
+    def test_skips_json_calls_from_the_front(self, default):
         self.assertFalse(show_toolbar_for_pages(self.request(AXIOS_ACCEPT)))
+        # nem chega a consultar a regra padrão do toolbar
+        default.assert_not_called()
 
-    @override_settings(DEBUG=False)
-    def test_never_shows_without_debug(self):
+    @mock.patch("config.debug_toolbar._default_show_toolbar", return_value=False)
+    def test_keeps_the_default_rule_for_html(self, _):
+        # sem DEBUG ou fora dos IPs internos, a regra padrão do toolbar continua valendo
         self.assertFalse(show_toolbar_for_pages(self.request(BROWSER_ACCEPT)))
