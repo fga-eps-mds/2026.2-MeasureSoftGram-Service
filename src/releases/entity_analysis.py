@@ -135,9 +135,16 @@ def get_entity_analysis(release: Release, configuration, level: str, key: str):
 
 
 def _get_release_repositories(release: Release):
-    repositories = release.repositories.all()
+    """
+    Repositórios da release, sempre restritos ao produto dela; sem nenhum, todos os do produto.
+
+    A release pode ter sido criada apontando para repositórios de outro produto, então
+    `release.repositories` sozinho vazaria nome e valores de repositórios de fora.
+    """
+    product_repositories = release.product.repositories.all()
+    repositories = product_repositories.filter(releases=release)
     if not repositories.exists():
-        repositories = release.product.repositories.all()
+        repositories = product_repositories
     return list(repositories.order_by("name", "id"))
 
 

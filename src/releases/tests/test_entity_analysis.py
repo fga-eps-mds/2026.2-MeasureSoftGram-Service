@@ -202,6 +202,27 @@ class EntityAnalysisEndpointTestCase(APITestCaseExpanded):
 
         self.assertEqual(list(repositories), ["api", "web"])
 
+    def foreign_repository(self):
+        other_org = self.get_organization(name="Other Organization", add_user=False)
+        other_product = self.get_product(other_org, name="Other Product")
+        foreign = self.get_repository(other_product, name="foreign")
+        self.calculated_characteristic(foreign, "maintainability", 0.99, local_datetime(2026, 3, 20))
+        return foreign
+
+    def test_does_not_leak_repository_of_another_product_linked_to_the_release(self):
+        self.release.repositories.set([self.api, self.foreign_repository()])
+
+        repositories = self.repositories_by_name(self.get("characteristic", "maintainability"))
+
+        self.assertEqual(list(repositories), ["api"])
+
+    def test_release_linked_only_to_foreign_repositories_uses_product_repositories(self):
+        self.release.repositories.set([self.foreign_repository()])
+
+        repositories = self.repositories_by_name(self.get("characteristic", "maintainability"))
+
+        self.assertEqual(list(repositories), ["api", "parser", "web"])
+
     def test_entity_outside_release_configuration_returns_404(self):
         response = self.get("characteristic", "security")
 
