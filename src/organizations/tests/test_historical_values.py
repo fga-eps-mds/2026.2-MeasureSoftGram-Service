@@ -163,6 +163,24 @@ class HistoricalValuesEndpointsTestCase(APITestCaseExpanded):
         latest = next(item["latest"] for item in response.json()["results"] if item["key"] == "coverage")
         self.assertEqual(latest["id"], first.id)
 
+    def test_latest_metric_value_filters_by_qualifier(self):
+        metric = SupportedMetric.objects.get(key="coverage")
+        CollectedMetric.objects.create(
+            metric=metric, repository=self.repository, value=10, qualifier="FIL", path="a.py", created_at=day(1)
+        )
+        CollectedMetric.objects.create(
+            metric=metric, repository=self.repository, value=70, qualifier="TRK", created_at=day(1)
+        )
+        latest_url = f"{self.url.replace('historical-values', 'latest-values')}/metrics/"
+
+        def latest(params):
+            response = self.client.get(latest_url, params)
+            return next(item["latest"] for item in response.json()["results"] if item["key"] == "coverage")
+
+        # sem o parâmetro, como antes: o primeiro registro gravado na coleta, que aqui é o de um arquivo
+        self.assertEqual(latest({})["value"], 10)
+        self.assertEqual(latest({"qualifier": "TRK"})["value"], 70)
+
     def test_user_who_is_not_member_cannot_read_history(self):
         outsider = CustomUser.objects.create(username="outsider", email="outsider@example.com")
         client = APIClient()

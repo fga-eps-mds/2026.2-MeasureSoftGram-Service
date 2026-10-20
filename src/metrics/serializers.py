@@ -72,6 +72,12 @@ class LatestCollectedMetricSerializer(utils.RepositoryRecordsMixin, serializers.
             "latest",
         )
 
+    def get_records_queryset(self):
+        qs = super().get_records_queryset()
+        # sem qualifier, o último registro da coleta pode ser o de um arquivo; qualifier=TRK traz o do repositório
+        qualifier = self.context.get("qualifier")
+        return qs.filter(qualifier=qualifier) if qualifier else qs
+
     def get_latest(self, obj: SupportedMetric):
         return CollectedMetricSerializer(self.get_entity_latest(obj)).data
 
