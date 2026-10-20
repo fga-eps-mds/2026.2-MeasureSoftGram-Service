@@ -31,18 +31,6 @@ CHILD_LEVEL = {
 }
 
 
-def get_release_configuration(release: Release):
-    """
-    Pré-configuração vigente na release: a mais recente criada até o `end_at`. Se nenhuma foi
-    criada até lá, usa a mais antiga do produto. É a mesma regra da árvore do modelo (TASK21.01.01),
-    para os dashboards do épico mostrarem a mesma configuração para a mesma release.
-    """
-    configurations = release.product.release_configuration.all()
-    return (
-        configurations.filter(created_at__lte=release.end_at).first() or configurations.order_by("created_at").first()
-    )
-
-
 def get_configured_entities(configuration) -> dict:
     """
     Entidades da pré-configuração por nível, na ordem em que aparecem nela.

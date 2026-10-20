@@ -7,9 +7,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from characteristics.models import CalculatedCharacteristic
+from entity_trees.services import resolve_release_configuration
 from organizations.mixins import UserScopedMixin
 from organizations.models import Repository
-from releases.entity_analysis import LEVELS, get_entity_analysis, get_entity_catalog, get_release_configuration
+from releases.entity_analysis import LEVELS, get_entity_analysis, get_entity_catalog
 from releases.models import Release
 from releases.serializers import CheckReleaseSerializer, ReleaseAllSerializer, ReleaseSerializer
 from releases.service import (
@@ -218,7 +219,7 @@ class EntityAnalysisViewSet(UserScopedMixin, viewsets.ViewSet):
         if release is None:
             return Response({"detail": "O parâmetro release_id é obrigatório."}, status=400)
 
-        configuration = get_release_configuration(release)
+        configuration = resolve_release_configuration(release.product, release)
         analysis = get_entity_analysis(release, configuration, level, key) if configuration else None
         if analysis is None:
             return Response({"detail": "Entidade não faz parte da configuração da release."}, status=404)
@@ -231,7 +232,7 @@ class EntityAnalysisViewSet(UserScopedMixin, viewsets.ViewSet):
         if release is None:
             return Response({"detail": "O parâmetro release_id é obrigatório."}, status=400)
 
-        configuration = get_release_configuration(release)
+        configuration = resolve_release_configuration(release.product, release)
         if configuration is None:
             return Response({level: [] for level in LEVELS})
 
