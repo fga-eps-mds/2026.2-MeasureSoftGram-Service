@@ -14,6 +14,8 @@ from organizations.serializers import (
     RepositoryTSQMILatestValueSerializer,
 )
 
+JSON_CONTENT_TYPE = "application/json"
+
 
 class OrganizationViewSet(UserScopedMixin, viewsets.ModelViewSet):
     queryset = Organization.objects.all().order_by("id").prefetch_related("products")
@@ -145,7 +147,7 @@ class ImportOrganizationViewSet(viewsets.ViewSet):
         is_personal = github_org_name.lower() == user.username.lower()
         headers = {
             "Authorization": f"token {token}",
-            "Accept": "application/json",
+            "Accept": JSON_CONTENT_TYPE,
         }
 
         if is_personal:
@@ -241,7 +243,7 @@ class GitHubReposViewSet(UserScopedMixin, viewsets.ViewSet):
         is_personal = github_org_name.lower() == user.username.lower()
         headers = {
             "Authorization": f"token {token}",
-            "Accept": "application/json",
+            "Accept": JSON_CONTENT_TYPE,
         }
 
         if is_personal:
@@ -349,7 +351,7 @@ class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
 
         headers = {
             "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
+            "Accept": JSON_CONTENT_TYPE,
         }
         timeout = getattr(settings, "GITLAB_TIMEOUT", 10)
 
