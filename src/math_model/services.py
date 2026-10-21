@@ -356,6 +356,44 @@ class MathModelServices:
         return index
 
     @staticmethod
+    def _align_listed_metrics_by_path(
+        measure_key: str,
+        listed_keys: List[str],
+        metric_index: Dict[str, List[CollectedMetric]],
+        empty_paths: set,
+    ):
+        """O msgram-core emparelha as métricas por arquivo pela posição
+        (ex.: complexity[i] com functions[i]). Quando a medida usa mais
+        de uma métrica por arquivo, só entram os arquivos que têm todas
+        elas, na mesma ordem de caminho. Retorna None com uma métrica só."""
+        if len(listed_keys) < 2:
+            return None
+
+        # chave (caminho, ocorrência): não colapsa entradas com o mesmo caminho
+        values_by_path: Dict[str, Dict[Tuple[str, int], float]] = {}
+        for key in listed_keys:
+            occurrences: Dict[str, int] = defaultdict(int)
+            values_by_path[key] = {}
+            for cm in metric_index.get(key, []):
+                if cm.qualifier != "FIL" or cm.path in empty_paths:
+                    continue
+                path = cm.path or ""
+                values_by_path[key][(path, occurrences[path])] = cm.value
+                occurrences[path] += 1
+
+        all_paths = set().union(*(values_by_path[key].keys() for key in listed_keys))
+        common_paths = sorted(set.intersection(*(set(values_by_path[key]) for key in listed_keys)))
+        skipped = len(all_paths) - len(common_paths)
+        if skipped:
+            logger.info(
+                "Medida %s: %d arquivo(s) sem todas as métricas (%s) ficaram de fora.",
+                measure_key,
+                skipped,
+                ", ".join(listed_keys),
+            )
+        return {key: [values_by_path[key][path] for path in common_paths] for key in listed_keys}
+
+    @staticmethod
     def _resolve_metric_params_in_memory(
         measure: SupportedMeasure,
         metric_index: Dict[str, List[CollectedMetric]],
@@ -377,35 +415,10 @@ class MathModelServices:
 
         metric_keys = [sm.key for sm in measure.metrics.all()]
 
-        # O msgram-core emparelha as métricas por arquivo pela posição
-        # (ex.: complexity[i] com functions[i]). Quando a medida usa mais
-        # de uma métrica por arquivo, só entram os arquivos que têm todas
-        # elas, na mesma ordem de caminho.
         listed_keys = [key for key in metric_keys if key in _LISTED_FIL_METRICS]
-        # chave (caminho, ocorrência): não colapsa entradas com o mesmo caminho
-        values_by_path: Dict[str, Dict[Tuple[str, int], float]] = {}
-        for key in listed_keys:
-            occurrences: Dict[str, int] = defaultdict(int)
-            values_by_path[key] = {}
-            for cm in metric_index.get(key, []):
-                if cm.qualifier != "FIL" or cm.path in empty_paths:
-                    continue
-                path = cm.path or ""
-                values_by_path[key][(path, occurrences[path])] = cm.value
-                occurrences[path] += 1
-        if len(listed_keys) > 1:
-            all_paths = set().union(*(values_by_path[key].keys() for key in listed_keys))
-            common_paths = sorted(set.intersection(*(set(values_by_path[key]) for key in listed_keys)))
-            skipped = len(all_paths) - len(common_paths)
-            if skipped:
-                logger.info(
-                    "Medida %s: %d arquivo(s) sem todas as métricas (%s) ficaram de fora.",
-                    measure.key,
-                    skipped,
-                    ", ".join(listed_keys),
-                )
-        else:
-            common_paths = None
+        aligned = MathModelServices._align_listed_metrics_by_path(
+            measure.key, listed_keys, metric_index, empty_paths
+        )
 
         params: Dict[str, object] = {}
         for key in metric_keys:
@@ -415,10 +428,10 @@ class MathModelServices:
                 # Lista de valores (1 por arquivo). Vazia se ausente —
                 # msgram-core mantém como lista (não desempacota com len!=1)
                 # e medidas como passed_tests retornam 0.0 nesse caso.
-                if common_paths is None:
+                if aligned is None:
                     params[key] = [cm.value for cm in cms if cm.qualifier == "FIL" and cm.path not in empty_paths]
                 else:
-                    params[key] = [values_by_path[key][path] for path in common_paths]
+                    params[key] = aligned[key]
             elif key in _UTS_METRICS:
                 params[key] = [cm.value for cm in cms if cm.qualifier == "UTS"]
             elif key in _GITHUB_METRICS:
