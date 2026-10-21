@@ -154,6 +154,12 @@ class ImportOrganizationViewSet(viewsets.ViewSet):
             url_fetch = f"https://api.github.com/orgs/{github_org_name}"
 
         r = requests.get(url_fetch, headers=headers)
+        if r.status_code in (401, 403):
+            return Response(
+                {"error": "github_token_invalid", "details": r.json() if r.content else {}},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         if r.status_code != 200:
             return Response(
                 {

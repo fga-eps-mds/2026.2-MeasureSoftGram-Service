@@ -27,3 +27,8 @@ INTERNAL_IPS = [ip[: ip.rfind(".")] + ".1" for ip in ips] + [
 # Reinserir o debug_toolbar apenas no ambiente de desenvolvimento
 INSTALLED_APPS += ["debug_toolbar"]  # noqa: F405
 MIDDLEWARE += ["debug_toolbar.middleware.DebugToolbarMiddleware"]  # noqa: F405
+
+# Chave padrao para dev caso nao esteja no .env
+if not GITHUB_TOKEN_ENCRYPTION_KEYS:  # noqa: F405
+    GITHUB_TOKEN_ENCRYPTION_KEYS = ["MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="]
+

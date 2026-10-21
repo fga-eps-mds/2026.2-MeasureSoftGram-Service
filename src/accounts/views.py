@@ -188,10 +188,34 @@ class GitHubOrganizationsViewSet(viewsets.ViewSet):
             "Authorization": f"token {token}",
             "Accept": "application/json",
         }
+        timeout = getattr(settings, "GITHUB_TIMEOUT", 10)
         results = []
 
         # 1. Fetch user's own profile (personal space)
-        r_user = requests.get("https://api.github.com/user", headers=headers)
+        try:
+            r_user = requests.get("https://api.github.com/user", headers=headers, timeout=timeout)
+        except requests.exceptions.Timeout:
+            return Response(
+                {"error": "Timeout contacting GitHub API."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except requests.exceptions.RequestException:
+            return Response(
+                {"error": "Error contacting GitHub API."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if r_user.status_code in (401, 403):
+            details = {}
+            try:
+                details = r_user.json()
+            except Exception:
+                pass
+            return Response(
+                {"error": "github_token_invalid", "details": details},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         if r_user.status_code == 200:
             user_data = r_user.json()
             results.append(
@@ -204,7 +228,30 @@ class GitHubOrganizationsViewSet(viewsets.ViewSet):
             )
 
         # 2. Fetch user's organizations
-        r_orgs = requests.get("https://api.github.com/user/orgs", headers=headers)
+        try:
+            r_orgs = requests.get("https://api.github.com/user/orgs", headers=headers, timeout=timeout)
+        except requests.exceptions.Timeout:
+            return Response(
+                {"error": "Timeout contacting GitHub API."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except requests.exceptions.RequestException:
+            return Response(
+                {"error": "Error contacting GitHub API."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if r_orgs.status_code in (401, 403):
+            details = {}
+            try:
+                details = r_orgs.json()
+            except Exception:
+                pass
+            return Response(
+                {"error": "github_token_invalid", "details": details},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         if r_orgs.status_code == 200:
             orgs = r_orgs.json()
             for org in orgs:
@@ -221,10 +268,15 @@ class GitHubOrganizationsViewSet(viewsets.ViewSet):
         else:
             # If fetching orgs failed but user fetched successfully, return at least user
             if not results:
+                details = {}
+                try:
+                    details = r_orgs.json()
+                except Exception:
+                    pass
                 return Response(
                     {
                         "error": "Failed to fetch organizations from GitHub",
-                        "details": r_orgs.json(),
+                        "details": details,
                     },
                     status=r_orgs.status_code,
                 )
