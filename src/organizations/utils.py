@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from urllib.parse import parse_qs, urlparse
 
@@ -188,7 +189,6 @@ def onboard_repository_async(repository, user):
 
 
 GITHUB_REPOS_PER_PAGE = 10
-GITHUB_SEARCH_MAX_RESULTS = 1000
 GITLAB_PROJECTS_PER_PAGE = 10
 
 
@@ -206,25 +206,92 @@ def github_total_pages(links, current_page):
     return github_link_page(links, "last") or current_page
 
 
-def search_github_user_repos(headers, search, timeout):
+class ProviderResponseError(Exception):
+    """Resposta de erro do GitHub/GitLab ao listar repositórios; `status_code` é o do provedor."""
+
+    def __init__(self, status_code, details):
+        super().__init__(f"Provider responded {status_code}")
+        self.status_code = status_code
+        self.details = details
+
+
+PROVIDER_PAGE_SIZE = 100
+PROVIDER_REPOS_CACHE_TTL = 300
+PROVIDER_PARALLEL_PAGES = 8
+
+
+def _provider_page(url, headers, params, page, timeout):
+    response = requests.get(url, headers=headers, params={**params, "per_page": PROVIDER_PAGE_SIZE, "page": page},
+                            timeout=timeout)
+    if response.status_code != 200:
+        details = {}
+        try:
+            details = response.json()
+        except Exception:
+            pass
+        raise ProviderResponseError(response.status_code, details)
+    body = response.json()
+    return response, body if isinstance(body, list) else []
+
+
+def fetch_all_provider_repos(provider, url, headers, params, timeout, cache_key):
     """
-    Repositórios de `/user/repos` (dono e colaborador) cujo nome contém `search`, ordenados por nome.
-    Percorre todas as páginas de 100; PermissionError se o token for recusado.
+    Todos os repositórios de uma lista do GitHub ou do GitLab, de 100 em 100. A 1ª página diz quantas são;
+    as outras vão em paralelo. O resultado fica em cache por alguns minutos, para trocar de página ou de aba
+    sem refazer as chamadas ao provedor.
     """
-    repos = []
-    url = "https://api.github.com/user/repos"
-    params = {"affiliation": "owner,collaborator", "sort": "full_name", "per_page": 100}
-    while url:
-        response = requests.get(url, headers=headers, params=params, timeout=timeout)
-        if response.status_code in (401, 403):
-            raise PermissionError("GitHub recusou o token.")
-        if response.status_code != 200:
-            break
-        repos.extend(response.json())
-        url = response.links.get("next", {}).get("url")
-        params = None
-    needle = search.lower()
-    return [repo for repo in repos if needle in (repo.get("name") or "").lower()]
+    from concurrent.futures import ThreadPoolExecutor
+
+    from django.core.cache import cache
+
+    cache_key = "provider-repos:" + hashlib.sha256(cache_key.encode()).hexdigest()
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    first, items = _provider_page(url, headers, params, 1, timeout)
+    if provider == "github":
+        total_pages = github_link_page(first.links, "last") or 1
+    else:
+        total_header = (first.headers or {}).get("X-Total-Pages")
+        total_pages = int(total_header) if isinstance(total_header, str) and total_header.isdigit() else 1
+
+    if total_pages > 1:
+        with ThreadPoolExecutor(max_workers=PROVIDER_PARALLEL_PAGES) as executor:
+            pages = executor.map(
+                lambda page: _provider_page(url, headers, params, page, timeout)[1], range(2, total_pages + 1)
+            )
+            for page_items in pages:
+                items.extend(page_items)
+
+    cache.set(cache_key, items, PROVIDER_REPOS_CACHE_TTL)
+    return items
+
+
+def _normalize_url(url):
+    return (url or "").strip().rstrip("/").lower()
+
+
+def imported_repository_keys(product):
+    """Identificadores dos repositórios já importados no produto: nome completo no provedor, id do GitLab e URL."""
+    keys = set()
+    for full_name, gitlab_path, gitlab_id, url in product.repositories.values_list(
+        "github_full_name", "gitlab_path_with_namespace", "gitlab_project_id", "url"
+    ):
+        keys.update(value.lower() for value in (full_name, gitlab_path) if value)
+        if gitlab_id:
+            keys.add(f"gitlab:{gitlab_id}")
+        if url:
+            keys.add(_normalize_url(url))
+    return keys
+
+
+def paginate_list(items, page, per_page):
+    """Fatia `items` na página pedida; devolve (itens, total de páginas, próxima página ou None)."""
+    total_pages = max(-(-len(items) // per_page), 1)
+    start = (page - 1) * per_page
+    next_page = page + 1 if page < total_pages else None
+    return items[start : start + per_page], total_pages, next_page
 
 
 def _fetch_paginated(url, headers, params=None, timeout=10):

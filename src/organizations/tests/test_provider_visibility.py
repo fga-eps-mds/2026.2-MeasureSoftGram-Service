@@ -3,10 +3,11 @@ from unittest.mock import MagicMock, patch
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
-from rest_framework.test import APIClient, APITestCase
+from rest_framework.test import APIClient
 
 from organizations.models import Organization, Repository, RepositoryAccess
 from organizations.utils import sync_provider_memberships
+from utils.tests import APITestCaseExpanded
 
 
 def _response(body, status_code=200, links=None, headers=None):
@@ -19,7 +20,7 @@ def _response(body, status_code=200, links=None, headers=None):
     return resp
 
 
-class ProviderVisibilityBase(APITestCase):
+class ProviderVisibilityBase(APITestCaseExpanded):
     def setUp(self):
         self.owner = get_user_model().objects.create_user(username="owner", password="pass")
         self.user = get_user_model().objects.create_user(username="guest", password="pass")
@@ -195,7 +196,7 @@ class RepositoryAccessViewsTestCase(ProviderVisibilityBase):
         self.assertEqual(response.status_code, 404)
 
 
-class ImportGitLabGroupTestCase(APITestCase):
+class ImportGitLabGroupTestCase(APITestCaseExpanded):
     def _client(self, username):
         user = get_user_model().objects.create_user(username=username, password="pass")
         user.gitlab_access_token = "gl"

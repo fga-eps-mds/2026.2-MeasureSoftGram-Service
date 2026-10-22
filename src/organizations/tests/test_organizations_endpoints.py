@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.authtoken.models import Token
@@ -535,20 +536,29 @@ class GitHubReposViewsTestCase(APITestCaseExpanded):
         self.assertEqual(kwargs["params"]["affiliation"], "owner,collaborator")
 
     @patch("organizations.views.requests.get")
-    def test_list_repos_search_uses_github_search(self, mock_get):
+    def test_list_repos_search_filters_every_org_repo_including_forks(self, mock_get):
+        cache.clear()
         org = self._linked_org("fga-eps-mds")
-        item = {"id": 9, "name": "msg", "full_name": "fga-eps-mds/msg", "html_url": "u"}
-        mock_get.return_value = self._mock_page(None, body={"total_count": 25, "items": [item]})
+        first = [{"id": i, "name": f"repo-{i}", "full_name": f"org/repo-{i}", "html_url": "u"} for i in range(3)]
+        second = [{"id": 9, "name": "2026.2-MSG-Service", "full_name": "org/2026.2-MSG-Service", "html_url": "u"}]
+        last_page = {"last": {"url": "https://api.github.com/orgs/fga-eps-mds/repos?page=2"}}
+
+        def side_effect(url, headers=None, params=None, timeout=None):
+            if params["page"] == 2:
+                return self._mock_page(second)
+            return self._mock_page(first, links=last_page)
+
+        mock_get.side_effect = side_effect
 
         url = reverse("github-repos-list", kwargs={"organization_pk": org.id})
         response = self.client.get(url, {"search": "msg"})
 
         args, kwargs = mock_get.call_args
-        self.assertEqual(args[0], "https://api.github.com/search/repositories")
-        self.assertEqual(kwargs["params"]["q"], "msg in:name org:fga-eps-mds")
-        self.assertEqual(response.json()[0]["name"], "msg")
-        self.assertEqual(response["X-Total-Pages"], "3")
-        self.assertEqual(response["X-Next-Page"], "2")
+        self.assertEqual(args[0], "https://api.github.com/orgs/fga-eps-mds/repos")
+        self.assertEqual(kwargs["params"]["per_page"], 100)
+        self.assertEqual([repo["name"] for repo in response.json()], ["2026.2-MSG-Service"])
+        self.assertEqual(response["X-Total-Pages"], "1")
+        self.assertNotIn("X-Next-Page", response)
 
     @patch("organizations.views.requests.get")
     def test_list_repos_timeout(self, mock_get):

@@ -1,5 +1,6 @@
 import requests
 from rest_framework import mixins, permissions, status, viewsets
+from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from django.core.cache import cache
 from django.conf import settings
@@ -8,11 +9,13 @@ from organizations.access import is_member, visible_repositories
 from organizations.mixins import UserScopedMixin
 from organizations.utils import (
     GITHUB_REPOS_PER_PAGE,
-    GITHUB_SEARCH_MAX_RESULTS,
     GITLAB_PROJECTS_PER_PAGE,
+    ProviderResponseError,
+    fetch_all_provider_repos,
     github_link_page,
     github_total_pages,
-    search_github_user_repos,
+    imported_repository_keys,
+    paginate_list,
 )
 from organizations.models import Organization, Product, Repository
 from organizations.serializers import (
@@ -232,6 +235,14 @@ class ImportOrganizationViewSet(viewsets.ViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+def get_exclude_product(request, organization):
+    """Produto do parâmetro `exclude_product` (aba "A Importar"), dentro da organização da URL; None sem ele."""
+    product_id = request.query_params.get("exclude_product")
+    if not product_id:
+        return None
+    return get_object_or_404(Product, id=product_id, organization=organization)
+
+
 class ImportGitLabGroupViewSet(viewsets.ViewSet):
     """Importa um grupo do GitLab como Organization compartilhada (uma por `gitlab_group_id`)."""
 
@@ -327,27 +338,26 @@ class GitHubReposViewSet(UserScopedMixin, viewsets.ViewSet):
             page = 1
         search = (request.query_params.get("search") or "").strip()
 
-        if search and is_personal:
-            return self._personal_search(headers, search, page)
-
-        if search:
-            scope = f"org:{github_org_name}"
-            url_fetch = "https://api.github.com/search/repositories"
-            params = {"q": f"{search} in:name {scope}", "per_page": GITHUB_REPOS_PER_PAGE, "page": page}
-        elif is_personal:
+        if is_personal:
             url_fetch = "https://api.github.com/user/repos"
-            params = {
-                "affiliation": "owner,collaborator",
-                "sort": "full_name",
-                "per_page": GITHUB_REPOS_PER_PAGE,
-                "page": page,
-            }
+            params = {"affiliation": "owner,collaborator", "sort": "full_name"}
         else:
             url_fetch = f"https://api.github.com/orgs/{github_org_name}/repos"
-            params = {"type": "all", "sort": "full_name", "per_page": GITHUB_REPOS_PER_PAGE, "page": page}
+            params = {"type": "all", "sort": "full_name"}
+
+        exclude_product = get_exclude_product(request, org)
+        if search or exclude_product is not None:
+            # Busca e "A Importar" filtram a lista inteira no servidor, para toda página ter 10 itens. A Search API
+            # do GitHub não serve aqui: ignora forks e repositórios em que a pessoa é só colaboradora.
+            return self._filtered_list(user, url_fetch, headers, params, search, exclude_product, page)
 
         try:
-            r = requests.get(url_fetch, headers=headers, params=params, timeout=settings.GITHUB_TIMEOUT)
+            r = requests.get(
+                url_fetch,
+                headers=headers,
+                params={**params, "per_page": GITHUB_REPOS_PER_PAGE, "page": page},
+                timeout=settings.GITHUB_TIMEOUT,
+            )
         except requests.exceptions.Timeout:
             return Response({"error": "Timeout contacting GitHub API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         except requests.exceptions.RequestException:
@@ -362,34 +372,39 @@ class GitHubReposViewSet(UserScopedMixin, viewsets.ViewSet):
                 status=r.status_code,
             )
 
-        body = r.json()
-        if search:
-            repos = body.get("items", [])
-            max_pages = -(-min(body.get("total_count", 0), GITHUB_SEARCH_MAX_RESULTS) // GITHUB_REPOS_PER_PAGE)
-            total_pages = max(max_pages, 1)
-            next_page = page + 1 if page < total_pages else None
-        else:
-            repos = body
-            total_pages = github_total_pages(r.links, page)
-            next_page = github_link_page(r.links, "next")
+        total_pages = github_total_pages(r.links, page)
+        next_page = github_link_page(r.links, "next")
+        return self._paged_response(r.json(), page, total_pages, next_page)
 
-        return self._paged_response(repos, page, total_pages, next_page)
-
-    def _personal_search(self, headers, search, page):
-        """Busca no espaço pessoal: a Search API perde repos de colaborador, então filtra /user/repos no servidor."""
+    def _filtered_list(self, user, url, headers, params, search, exclude_product, page):
+        cache_key = f"github-repos:{user.id}:{url}:{sorted(params.items())}"
         try:
-            repos = search_github_user_repos(headers, search, settings.GITHUB_TIMEOUT)
+            repos = fetch_all_provider_repos("github", url, headers, params, settings.GITHUB_TIMEOUT, cache_key)
         except requests.exceptions.Timeout:
             return Response({"error": "Timeout contacting GitHub API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         except requests.exceptions.RequestException:
             return Response({"error": "Error contacting GitHub API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        except PermissionError as exc:
-            return Response({"error": "github_token_invalid", "details": str(exc)}, status=status.HTTP_409_CONFLICT)
+        except ProviderResponseError as exc:
+            if exc.status_code in (401, 403):
+                return Response(
+                    {"error": "github_token_invalid", "details": exc.details}, status=status.HTTP_409_CONFLICT
+                )
+            return Response({"error": "Failed to fetch repositories", "details": exc.details}, status=exc.status_code)
 
-        total_pages = max(-(-len(repos) // GITHUB_REPOS_PER_PAGE), 1)
-        start = (page - 1) * GITHUB_REPOS_PER_PAGE
-        next_page = page + 1 if page < total_pages else None
-        return self._paged_response(repos[start : start + GITHUB_REPOS_PER_PAGE], page, total_pages, next_page)
+        needle = search.lower()
+        if needle:
+            repos = [repo for repo in repos if needle in (repo.get("name") or "").lower()]
+        if exclude_product is not None:
+            imported = imported_repository_keys(exclude_product)
+            repos = [
+                repo
+                for repo in repos
+                if (repo.get("full_name") or "").lower() not in imported
+                and (repo.get("html_url") or "").rstrip("/").lower() not in imported
+            ]
+
+        page_items, total_pages, next_page = paginate_list(repos, page, GITHUB_REPOS_PER_PAGE)
+        return self._paged_response(page_items, page, total_pages, next_page)
 
     @staticmethod
     def _paged_response(repos, page, total_pages, next_page):
@@ -414,8 +429,8 @@ class GitHubReposViewSet(UserScopedMixin, viewsets.ViewSet):
 class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
-    def list(self, request, organization_pk=None):
-        self.get_organization()
+    def list(self, request, organization_pk=None):  # noqa: C901
+        org = self.get_organization()
 
         user = request.user
         token = user.gitlab_access_token
@@ -442,13 +457,13 @@ class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
             )
 
         kind = request.query_params.get("kind", "group")
-        page = request.query_params.get("page", 1)
+        try:
+            page = max(int(request.query_params.get("page", 1)), 1)
+        except ValueError:
+            page = 1
         search = request.query_params.get("search")
 
-        params = {
-            "per_page": GITLAB_PROJECTS_PER_PAGE,
-            "page": page,
-        }
+        params = {}
         if kind == "user":
             # membership=true inclui projetos em que a pessoa foi convidada, mesmo de grupos dos quais não é membro.
             url = "https://gitlab.com/api/v4/projects"
@@ -464,8 +479,17 @@ class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
         }
         timeout = getattr(settings, "GITLAB_TIMEOUT", 10)
 
+        exclude_product = get_exclude_product(request, org)
+        if exclude_product is not None:
+            return self._not_imported(user, url, headers, params, timeout, exclude_product, page)
+
         try:
-            r = requests.get(url, headers=headers, params=params, timeout=timeout)
+            r = requests.get(
+                url,
+                headers=headers,
+                params={**params, "per_page": GITLAB_PROJECTS_PER_PAGE, "page": page},
+                timeout=timeout,
+            )
         except requests.exceptions.Timeout:
             return Response(
                 {"error": "gitlab_timeout", "details": "Timeout contacting GitLab API."},
@@ -479,8 +503,61 @@ class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
 
         return self._build_response(r)
 
+    def _not_imported(self, user, url, headers, params, timeout, exclude_product, page):
+        """Aba "A Importar": a lista inteira do GitLab sem os projetos do produto, em páginas sempre cheias."""
+        cache_key = f"gitlab-projects:{user.id}:{url}:{sorted(params.items())}"
+        try:
+            projects = fetch_all_provider_repos("gitlab", url, headers, params, timeout, cache_key)
+        except requests.exceptions.Timeout:
+            return Response(
+                {"error": "gitlab_timeout", "details": "Timeout contacting GitLab API."},
+                status=status.HTTP_504_GATEWAY_TIMEOUT,
+            )
+        except requests.exceptions.RequestException:
+            return Response(
+                {"error": "gitlab_unavailable", "details": "Error contacting GitLab API."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        except ProviderResponseError as exc:
+            if exc.status_code in (401, 403):
+                return Response(
+                    {"error": "gitlab_token_invalid", "details": exc.details}, status=status.HTTP_409_CONFLICT
+                )
+            return Response(
+                {"error": "Failed to fetch projects from GitLab", "details": exc.details}, status=exc.status_code
+            )
+
+        imported = imported_repository_keys(exclude_product)
+        projects = [
+            project
+            for project in projects
+            if f"gitlab:{project.get('id')}" not in imported
+            and (project.get("path_with_namespace") or "").lower() not in imported
+            and (project.get("web_url") or "").rstrip("/").lower() not in imported
+        ]
+        page_items, total_pages, next_page = paginate_list(projects, page, GITLAB_PROJECTS_PER_PAGE)
+        response = Response(self._serialize_projects(page_items), status=status.HTTP_200_OK)
+        response["X-Page"] = str(page)
+        response["X-Total-Pages"] = str(total_pages)
+        if next_page:
+            response["X-Next-Page"] = str(next_page)
+        return response
+
     @staticmethod
-    def _build_response(r):
+    def _serialize_projects(projects):
+        return [
+            {
+                "gitlab_project_id": item.get("id"),
+                "gitlab_path_with_namespace": item.get("path_with_namespace"),
+                "name": item.get("name"),
+                "description": item.get("description") or "",
+                "url": item.get("web_url"),
+            }
+            for item in projects
+        ]
+
+    @classmethod
+    def _build_response(cls, r):
         if r.status_code in (401, 403):
             return Response(
                 {"error": "gitlab_token_invalid", "details": r.json() if r.content else {}},
@@ -497,18 +574,7 @@ class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
             )
 
         projects = r.json()
-        results = []
-        if isinstance(projects, list):
-            for item in projects:
-                results.append(
-                    {
-                        "gitlab_project_id": item.get("id"),
-                        "gitlab_path_with_namespace": item.get("path_with_namespace"),
-                        "name": item.get("name"),
-                        "description": item.get("description") or "",
-                        "url": item.get("web_url"),
-                    }
-                )
+        results = cls._serialize_projects(projects) if isinstance(projects, list) else []
 
         response = Response(results, status=status.HTTP_200_OK)
         if "X-Total-Pages" in r.headers:
