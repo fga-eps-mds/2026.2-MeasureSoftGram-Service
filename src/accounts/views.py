@@ -188,7 +188,7 @@ class GitHubOrganizationsViewSet(viewsets.ViewSet):
         st.delete()
         return token, None
 
-    def _fetch_github(self, url, headers, timeout):
+    def _fetch_github(self, url, headers, timeout, follow_next=False):
         try:
             r = requests.get(url, headers=headers, timeout=timeout)
         except requests.exceptions.Timeout:
@@ -220,7 +220,18 @@ class GitHubOrganizationsViewSet(viewsets.ViewSet):
                 status=r.status_code,
             )
 
-        return r.json(), None
+        if not follow_next:
+            return r.json(), None
+
+        # listas do GitHub vêm em páginas: segue o rel="next" do header Link até a última
+        items = list(r.json())
+        next_url = (r.links or {}).get("next", {}).get("url")
+        if isinstance(next_url, str) and next_url:
+            next_items, err = self._fetch_github(next_url, headers, timeout, follow_next=True)
+            if err:
+                return None, err
+            items.extend(next_items)
+        return items, None
 
     def list(self, request):
         token, err = self._get_token(request.user)
@@ -247,7 +258,9 @@ class GitHubOrganizationsViewSet(viewsets.ViewSet):
             }
         )
 
-        orgs_data, orgs_err = self._fetch_github("https://api.github.com/user/orgs?per_page=100", headers, timeout)
+        orgs_data, orgs_err = self._fetch_github(
+            "https://api.github.com/user/orgs?per_page=100", headers, timeout, follow_next=True
+        )
         if orgs_err and (orgs_err.status_code == status.HTTP_409_CONFLICT or not results):
             return orgs_err
 

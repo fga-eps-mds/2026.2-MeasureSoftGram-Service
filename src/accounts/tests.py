@@ -431,14 +431,14 @@ class AccountsViews(APITestCaseExpanded):
         self.user.github_access_token = "gh_token_123"
         self.user.save()
 
-        def side_effect(url, headers=None, params=None):
+        def side_effect(url, headers=None, timeout=None):
             resp = MagicMock()
             resp.status_code = 200
             resp.links = {}
-            if url == "https://api.github.com/user/orgs":
+            if url == "https://api.github.com/user/orgs?per_page=100":
                 resp.json.return_value = [{"id": 1, "login": "first-page-org"}]
-                resp.links = {"next": {"url": "https://api.github.com/user/orgs?page=2"}}
-            elif url == "https://api.github.com/user/orgs?page=2":
+                resp.links = {"next": {"url": "https://api.github.com/user/orgs?per_page=100&page=2"}}
+            elif url == "https://api.github.com/user/orgs?per_page=100&page=2":
                 resp.json.return_value = [{"id": 2, "login": "fga-eps-mds"}]
             else:
                 resp.json.return_value = {"id": 123, "login": "test-user"}
