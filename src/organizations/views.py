@@ -5,6 +5,7 @@ from django.core.cache import cache
 from django.conf import settings
 
 from organizations.mixins import UserScopedMixin
+from organizations.utils import GITHUB_REPOS_PER_PAGE, github_link_page, github_total_pages
 from organizations.models import Organization, Product, Repository
 from organizations.serializers import (
     OrganizationSerializer,
@@ -249,61 +250,71 @@ class GitHubReposViewSet(UserScopedMixin, viewsets.ViewSet):
             "Accept": JSON_CONTENT_TYPE,
         }
 
-        if is_personal:
-            url_fetch = "https://api.github.com/user/repos?affiliation=owner&per_page=100"
+        try:
+            page = max(int(request.query_params.get("page", 1)), 1)
+        except ValueError:
+            page = 1
+        search = (request.query_params.get("search") or "").strip()
+
+        if search:
+            scope = f"user:{github_org_name}" if is_personal else f"org:{github_org_name}"
+            url_fetch = "https://api.github.com/search/repositories"
+            params = {"q": f"{search} in:name {scope}", "per_page": GITHUB_REPOS_PER_PAGE, "page": page}
+        elif is_personal:
+            url_fetch = "https://api.github.com/user/repos"
+            params = {
+                "affiliation": "owner,collaborator",
+                "sort": "full_name",
+                "per_page": GITHUB_REPOS_PER_PAGE,
+                "page": page,
+            }
         else:
-            url_fetch = f"https://api.github.com/orgs/{github_org_name}/repos?per_page=100"
+            url_fetch = f"https://api.github.com/orgs/{github_org_name}/repos"
+            params = {"type": "all", "sort": "full_name", "per_page": GITHUB_REPOS_PER_PAGE, "page": page}
 
-        repos = []
-        while url_fetch:
-            try:
-                r = requests.get(url_fetch, headers=headers, timeout=settings.GITHUB_TIMEOUT)
-            except requests.exceptions.Timeout:
-                return Response(
-                    {"error": "Timeout contacting GitHub API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
-            except requests.exceptions.RequestException:
-                return Response(
-                    {"error": "Error contacting GitHub API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE
-                )
+        try:
+            r = requests.get(url_fetch, headers=headers, params=params, timeout=settings.GITHUB_TIMEOUT)
+        except requests.exceptions.Timeout:
+            return Response({"error": "Timeout contacting GitHub API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except requests.exceptions.RequestException:
+            return Response({"error": "Error contacting GitHub API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
-            if r.status_code == 401 or r.status_code == 403:
-                return Response(
-                    {"error": "github_token_invalid", "details": r.json()}, status=status.HTTP_409_CONFLICT
-                )
+        if r.status_code in (401, 403):
+            return Response({"error": "github_token_invalid", "details": r.json()}, status=status.HTTP_409_CONFLICT)
 
-            if r.status_code != 200:
-                return Response(
-                    {
-                        "error": f"Failed to fetch repositories for '{github_org_name}'",
-                        "details": r.json(),
-                    },
-                    status=r.status_code,
-                )
-            repos.extend(r.json())
-
-            link_header = r.headers.get("Link")
-            url_fetch = None
-            if link_header:
-                links = link_header.split(",")
-                for link in links:
-                    parts = link.split(";")
-                    if len(parts) >= 2 and 'rel="next"' in parts[1]:
-                        url_fetch = parts[0].strip()[1:-1]
-                        break
-
-        results = []
-        for repo in repos:
-            results.append(
-                {
-                    "github_repo_id": repo.get("id"),
-                    "github_full_name": repo.get("full_name"),
-                    "name": repo.get("name"),
-                    "description": repo.get("description"),
-                    "url": repo.get("html_url"),
-                }
+        if r.status_code != 200:
+            return Response(
+                {"error": f"Failed to fetch repositories for '{github_org_name}'", "details": r.json()},
+                status=r.status_code,
             )
-        return Response(results, status=status.HTTP_200_OK)
+
+        body = r.json()
+        if search:
+            repos = body.get("items", [])
+            max_pages = -(-min(body.get("total_count", 0), GITHUB_SEARCH_MAX_RESULTS) // GITHUB_REPOS_PER_PAGE)
+            total_pages = max(max_pages, 1)
+            next_page = page + 1 if page < total_pages else None
+        else:
+            repos = body
+            total_pages = github_total_pages(r.links, page)
+            next_page = github_link_page(r.links, "next")
+
+        results = [
+            {
+                "github_repo_id": repo.get("id"),
+                "github_full_name": repo.get("full_name"),
+                "name": repo.get("name"),
+                "description": repo.get("description"),
+                "url": repo.get("html_url"),
+            }
+            for repo in repos
+        ]
+        response = Response(results, status=status.HTTP_200_OK)
+        response["X-Page"] = str(page)
+        response["X-Total-Pages"] = str(total_pages)
+        if next_page:
+            response["X-Next-Page"] = str(next_page)
+        return response
 
 
 class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):

@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import parse_qs, urlparse
 
 import requests
 
@@ -184,3 +185,21 @@ def onboard_repository_async(repository, user):
             logger.info(f"Successfully populated mock math model calculations for {repository.name}")
         except Exception as exc:
             logger.error(f"Failed to populate mock calculations for {repository.name}: {exc}")
+
+
+GITHUB_REPOS_PER_PAGE = 10
+GITHUB_SEARCH_MAX_RESULTS = 1000
+
+
+def github_link_page(links, rel):
+    """Número da página apontada pelo `rel` do header Link do GitHub, ou None."""
+    url = (links or {}).get(rel, {}).get("url")
+    if not url:
+        return None
+    values = parse_qs(urlparse(url).query).get("page")
+    return int(values[0]) if values and values[0].isdigit() else None
+
+
+def github_total_pages(links, current_page):
+    """Total de páginas: a do `rel="last"`; sem ele, a página atual é a última."""
+    return github_link_page(links, "last") or current_page

@@ -454,6 +454,7 @@ class GitHubReposViewsTestCase(APITestCaseExpanded):
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
+        mock_resp.links = {}
         mock_resp.json.return_value = [
             {
                 "id": 111,
@@ -470,6 +471,84 @@ class GitHubReposViewsTestCase(APITestCaseExpanded):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 1)
         self.assertEqual(response.json()[0]["name"], "repo-1")
+
+    def _mock_page(self, items, links=None, body=None):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.links = links or {}
+        resp.json.return_value = body if body is not None else items
+        return resp
+
+    def _linked_org(self, github_org_name):
+        org = self.get_organization(name="Org Linked")
+        org.github_org_name = github_org_name
+        org.save()
+        self.user.github_access_token = "my-token"
+        self.user.save()
+        return org
+
+    @patch("organizations.views.requests.get")
+    def test_list_repos_org_requests_one_page_of_ten(self, mock_get):
+        org = self._linked_org("fga-eps-mds")
+        item = {"id": 1, "name": "r", "full_name": "fga-eps-mds/r", "html_url": "u"}
+        mock_get.return_value = self._mock_page(
+            [item],
+            links={
+                "next": {"url": "https://api.github.com/orgs/fga-eps-mds/repos?page=3"},
+                "last": {"url": "https://api.github.com/orgs/fga-eps-mds/repos?page=66"},
+            },
+        )
+
+        url = reverse("github-repos-list", kwargs={"organization_pk": org.id})
+        response = self.client.get(url, {"page": 2})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_get.call_count, 1)
+        args, kwargs = mock_get.call_args
+        self.assertEqual(args[0], "https://api.github.com/orgs/fga-eps-mds/repos")
+        self.assertEqual(kwargs["params"]["per_page"], 10)
+        self.assertEqual(kwargs["params"]["page"], 2)
+        self.assertEqual(response["X-Page"], "2")
+        self.assertEqual(response["X-Total-Pages"], "66")
+        self.assertEqual(response["X-Next-Page"], "3")
+
+    @patch("organizations.views.requests.get")
+    def test_list_repos_last_page_has_no_next(self, mock_get):
+        org = self._linked_org("fga-eps-mds")
+        mock_get.return_value = self._mock_page([])
+
+        url = reverse("github-repos-list", kwargs={"organization_pk": org.id})
+        response = self.client.get(url, {"page": 4})
+
+        self.assertEqual(response["X-Total-Pages"], "4")
+        self.assertNotIn("X-Next-Page", response)
+
+    @patch("organizations.views.requests.get")
+    def test_list_repos_personal_includes_collaborator(self, mock_get):
+        org = self._linked_org("test-user")
+        mock_get.return_value = self._mock_page([])
+
+        self.client.get(reverse("github-repos-list", kwargs={"organization_pk": org.id}))
+
+        args, kwargs = mock_get.call_args
+        self.assertEqual(args[0], "https://api.github.com/user/repos")
+        self.assertEqual(kwargs["params"]["affiliation"], "owner,collaborator")
+
+    @patch("organizations.views.requests.get")
+    def test_list_repos_search_uses_github_search(self, mock_get):
+        org = self._linked_org("fga-eps-mds")
+        item = {"id": 9, "name": "msg", "full_name": "fga-eps-mds/msg", "html_url": "u"}
+        mock_get.return_value = self._mock_page(None, body={"total_count": 25, "items": [item]})
+
+        url = reverse("github-repos-list", kwargs={"organization_pk": org.id})
+        response = self.client.get(url, {"search": "msg"})
+
+        args, kwargs = mock_get.call_args
+        self.assertEqual(args[0], "https://api.github.com/search/repositories")
+        self.assertEqual(kwargs["params"]["q"], "msg in:name org:fga-eps-mds")
+        self.assertEqual(response.json()[0]["name"], "msg")
+        self.assertEqual(response["X-Total-Pages"], "3")
+        self.assertEqual(response["X-Next-Page"], "2")
 
     @patch("organizations.views.requests.get")
     def test_list_repos_timeout(self, mock_get):
@@ -551,6 +630,7 @@ class GitHubReposViewsTestCase(APITestCaseExpanded):
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
+        mock_resp.links = {}
         mock_resp.json.return_value = []
         mock_get.return_value = mock_resp
 

@@ -247,7 +247,7 @@ class GitHubOrganizationsViewSet(viewsets.ViewSet):
             }
         )
 
-        orgs_data, orgs_err = self._fetch_github("https://api.github.com/user/orgs", headers, timeout)
+        orgs_data, orgs_err = self._fetch_github("https://api.github.com/user/orgs?per_page=100", headers, timeout)
         if orgs_err and (orgs_err.status_code == status.HTTP_409_CONFLICT or not results):
             return orgs_err
 
