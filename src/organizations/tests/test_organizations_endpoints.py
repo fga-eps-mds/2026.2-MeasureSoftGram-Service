@@ -755,7 +755,8 @@ class GitHubReposViewsTestCase(APITestCaseExpanded):
         self.assertEqual(data[0]["url"], "https://gitlab.com/my-user/user-proj")
 
         called_url = mock_get.call_args[0][0]
-        self.assertIn("api/v4/users/99/projects", called_url)
+        self.assertEqual(called_url, "https://gitlab.com/api/v4/projects")
+        self.assertEqual(mock_get.call_args[1]["params"]["membership"], "true")
 
     @patch("organizations.views.requests.get")
     def test_gitlab_projects_with_search(self, mock_get):

@@ -305,12 +305,7 @@ class GitLabNamespacesViewSet(viewsets.ViewSet):
                     headers=headers,
                     timeout=timeout,
                 )
-                future_groups = executor.submit(
-                    requests.get,
-                    "https://gitlab.com/api/v4/groups?min_access_level=10",
-                    headers=headers,
-                    timeout=timeout,
-                )
+                future_groups = executor.submit(self._fetch_all_groups, headers, timeout)
                 r_user = future_user.result()
                 r_groups = future_groups.result()
         except requests.exceptions.Timeout:
@@ -326,6 +321,26 @@ class GitLabNamespacesViewSet(viewsets.ViewSet):
 
         return self._build_response(r_user, r_groups)
 
+    @staticmethod
+    def _fetch_all_groups(headers, timeout):
+        """Segue o X-Next-Page de /groups até o fim; a resposta devolvida leva todos os itens em `all_groups`."""
+        base_url = "https://gitlab.com/api/v4/groups?min_access_level=10&per_page=100"
+        response = requests.get(base_url, headers=headers, timeout=timeout)
+        groups = []
+        current = response
+        while current.status_code == 200:
+            page_data = current.json()
+            if isinstance(page_data, list):
+                groups.extend(page_data)
+            next_page = current.headers.get("X-Next-Page")
+            if not (isinstance(next_page, str) and next_page.isdigit()):
+                break
+            current = requests.get(f"{base_url}&page={next_page}", headers=headers, timeout=timeout)
+        if current.status_code != 200:
+            return current
+        response.all_groups = groups
+        return response
+
     @classmethod
     def _build_response(cls, r_user, r_groups):
         error_response = cls._gitlab_error_response(r_user, r_groups)
@@ -333,7 +348,9 @@ class GitLabNamespacesViewSet(viewsets.ViewSet):
             return error_response
 
         results = [cls._serialize_gitlab_user(r_user.json())]
-        groups_data = r_groups.json()
+        groups_data = getattr(r_groups, "all_groups", None)
+        if not isinstance(groups_data, list):
+            groups_data = r_groups.json()
         if isinstance(groups_data, list):
             results.extend(cls._serialize_gitlab_group(group) for group in groups_data)
 

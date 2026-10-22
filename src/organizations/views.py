@@ -4,8 +4,16 @@ from rest_framework.response import Response
 from django.core.cache import cache
 from django.conf import settings
 
+from organizations.access import is_member, visible_repositories
 from organizations.mixins import UserScopedMixin
-from organizations.utils import GITHUB_REPOS_PER_PAGE, github_link_page, github_total_pages
+from organizations.utils import (
+    GITHUB_REPOS_PER_PAGE,
+    GITHUB_SEARCH_MAX_RESULTS,
+    GITLAB_PROJECTS_PER_PAGE,
+    github_link_page,
+    github_total_pages,
+    search_github_user_repos,
+)
 from organizations.models import Organization, Product, Repository
 from organizations.serializers import (
     OrganizationSerializer,
@@ -39,7 +47,10 @@ class ProductViewSet(UserScopedMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         org = self.get_organization()
         qs = Product.objects.all().order_by("-id").select_related("organization").prefetch_related("repositories")
-        return qs.filter(organization=org)
+        qs = qs.filter(organization=org)
+        if not is_member(self.request.user, org):
+            qs = qs.filter(repositories__accesses__user=self.request.user).distinct()
+        return qs
 
     def perform_create(self, serializer):
         org = self.get_organization()
@@ -79,8 +90,13 @@ class RepositoryViewSet(
 
     def get_queryset(self):
         product = self.get_product()
-        qs = Repository.objects.all().order_by("-id").select_related("product", "product__organization")
-        return qs.filter(product=product)
+        qs = visible_repositories(product, self.request.user).order_by("-id")
+        return qs.select_related("product", "product__organization")
+
+    def get_object(self):
+        repository = self.get_repository()
+        self.check_object_permissions(self.request, repository)
+        return repository
 
 
 class RepositoriesTSQMILatestValueViewSet(
@@ -97,7 +113,7 @@ class RepositoriesTSQMILatestValueViewSet(
 
     def get_queryset(self):
         product = self.get_product()
-        qs = product.repositories.all()
+        qs = visible_repositories(product, self.request.user)
         qs = qs.order_by("-id")
         qs = qs.select_related("product", "product__organization").prefetch_related("calculated_tsqmis")
         return qs
@@ -113,7 +129,7 @@ class RepositoriesTSQMIHistoryViewSet(
 
     def get_queryset(self):
         product = self.get_product()
-        qs = product.repositories.all()
+        qs = visible_repositories(product, self.request.user)
         qs = qs.select_related("product", "product__organization").prefetch_related("calculated_tsqmis")
         return qs
 
@@ -216,6 +232,61 @@ class ImportOrganizationViewSet(viewsets.ViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+class ImportGitLabGroupViewSet(viewsets.ViewSet):
+    """Importa um grupo do GitLab como Organization compartilhada (uma por `gitlab_group_id`)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def create(self, request):
+        group_id = request.data.get("gitlab_group_id")
+        if not group_id:
+            return Response({"error": "gitlab_group_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        token = user.gitlab_access_token
+        if not token:
+            return Response({"error": "GitLab account not linked."}, status=status.HTTP_400_BAD_REQUEST)
+
+        headers = {"Authorization": f"Bearer {token}", "Accept": JSON_CONTENT_TYPE}
+        timeout = getattr(settings, "GITLAB_TIMEOUT", 10)
+        try:
+            r = requests.get(f"https://gitlab.com/api/v4/groups/{group_id}", headers=headers, timeout=timeout)
+        except requests.exceptions.RequestException:
+            return Response({"error": "gitlab_unavailable"}, status=status.HTTP_502_BAD_GATEWAY)
+
+        if r.status_code in (401, 403):
+            return Response({"error": "gitlab_token_invalid"}, status=status.HTTP_409_CONFLICT)
+        if r.status_code == 404:
+            return Response(
+                {"error": "User is not a member of this group in GitLab."}, status=status.HTTP_403_FORBIDDEN
+            )
+        if r.status_code != 200:
+            return Response({"error": "Failed to fetch group from GitLab"}, status=r.status_code)
+
+        group = r.json()
+        name = group.get("name") or group.get("full_path") or str(group_id)
+        org, created = Organization.objects.get_or_create(
+            gitlab_group_id=group.get("id"),
+            defaults={
+                "name": name,
+                "avatar_url": group.get("avatar_url"),
+                "description": group.get("description") or "",
+            },
+        )
+        if not created:
+            org.name = name
+            org.avatar_url = group.get("avatar_url")
+            org.save()
+
+        org.members.add(user)
+        if not org.admin:
+            org.admin = user
+            org.save()
+
+        serializer = OrganizationSerializer(org, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
 class GitHubReposViewSet(UserScopedMixin, viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -256,8 +327,11 @@ class GitHubReposViewSet(UserScopedMixin, viewsets.ViewSet):
             page = 1
         search = (request.query_params.get("search") or "").strip()
 
+        if search and is_personal:
+            return self._personal_search(headers, search, page)
+
         if search:
-            scope = f"user:{github_org_name}" if is_personal else f"org:{github_org_name}"
+            scope = f"org:{github_org_name}"
             url_fetch = "https://api.github.com/search/repositories"
             params = {"q": f"{search} in:name {scope}", "per_page": GITHUB_REPOS_PER_PAGE, "page": page}
         elif is_personal:
@@ -299,6 +373,26 @@ class GitHubReposViewSet(UserScopedMixin, viewsets.ViewSet):
             total_pages = github_total_pages(r.links, page)
             next_page = github_link_page(r.links, "next")
 
+        return self._paged_response(repos, page, total_pages, next_page)
+
+    def _personal_search(self, headers, search, page):
+        """Busca no espaço pessoal: a Search API perde repos de colaborador, então filtra /user/repos no servidor."""
+        try:
+            repos = search_github_user_repos(headers, search, settings.GITHUB_TIMEOUT)
+        except requests.exceptions.Timeout:
+            return Response({"error": "Timeout contacting GitHub API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except requests.exceptions.RequestException:
+            return Response({"error": "Error contacting GitHub API."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except PermissionError as exc:
+            return Response({"error": "github_token_invalid", "details": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        total_pages = max(-(-len(repos) // GITHUB_REPOS_PER_PAGE), 1)
+        start = (page - 1) * GITHUB_REPOS_PER_PAGE
+        next_page = page + 1 if page < total_pages else None
+        return self._paged_response(repos[start : start + GITHUB_REPOS_PER_PAGE], page, total_pages, next_page)
+
+    @staticmethod
+    def _paged_response(repos, page, total_pages, next_page):
         results = [
             {
                 "github_repo_id": repo.get("id"),
@@ -351,15 +445,16 @@ class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
         page = request.query_params.get("page", 1)
         search = request.query_params.get("search")
 
-        if kind == "user":
-            url = f"https://gitlab.com/api/v4/users/{namespace_id}/projects"
-        else:
-            url = f"https://gitlab.com/api/v4/groups/{namespace_id}/projects"
-
         params = {
-            "per_page": 50,
+            "per_page": GITLAB_PROJECTS_PER_PAGE,
             "page": page,
         }
+        if kind == "user":
+            # membership=true inclui projetos em que a pessoa foi convidada, mesmo de grupos dos quais não é membro.
+            url = "https://gitlab.com/api/v4/projects"
+            params.update({"membership": "true", "simple": "true", "order_by": "path"})
+        else:
+            url = f"https://gitlab.com/api/v4/groups/{namespace_id}/projects"
         if search:
             params["search"] = search
 

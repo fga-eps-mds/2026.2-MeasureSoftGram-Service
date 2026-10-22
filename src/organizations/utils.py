@@ -189,6 +189,7 @@ def onboard_repository_async(repository, user):
 
 GITHUB_REPOS_PER_PAGE = 10
 GITHUB_SEARCH_MAX_RESULTS = 1000
+GITLAB_PROJECTS_PER_PAGE = 10
 
 
 def github_link_page(links, rel):
@@ -203,3 +204,131 @@ def github_link_page(links, rel):
 def github_total_pages(links, current_page):
     """Total de páginas: a do `rel="last"`; sem ele, a página atual é a última."""
     return github_link_page(links, "last") or current_page
+
+
+def search_github_user_repos(headers, search, timeout):
+    """
+    Repositórios de `/user/repos` (dono e colaborador) cujo nome contém `search`, ordenados por nome.
+    Percorre todas as páginas de 100; PermissionError se o token for recusado.
+    """
+    repos = []
+    url = "https://api.github.com/user/repos"
+    params = {"affiliation": "owner,collaborator", "sort": "full_name", "per_page": 100}
+    while url:
+        response = requests.get(url, headers=headers, params=params, timeout=timeout)
+        if response.status_code in (401, 403):
+            raise PermissionError("GitHub recusou o token.")
+        if response.status_code != 200:
+            break
+        repos.extend(response.json())
+        url = response.links.get("next", {}).get("url")
+        params = None
+    needle = search.lower()
+    return [repo for repo in repos if needle in (repo.get("name") or "").lower()]
+
+
+def _fetch_paginated(url, headers, params=None, timeout=10):
+    """Itens de todas as páginas (header Link) de um endpoint de lista do GitHub/GitLab; None se alguma falhar."""
+    items = []
+    while url:
+        response = requests.get(url, headers=headers, params=params, timeout=timeout)
+        if response.status_code != 200:
+            return None
+        body = response.json()
+        if not isinstance(body, list):
+            return None
+        items.extend(body)
+        next_url = (response.links or {}).get("next", {}).get("url")
+        url, params = next_url, None
+    return items
+
+
+def _sync_organization_membership(user, id_field, provider_ids):
+    """Entra nas Organizations do provedor das quais o usuário faz parte e sai das que ele deixou."""
+    from organizations.models import Organization
+
+    linked = Organization.objects.filter(**{f"{id_field}__isnull": False})
+    for org in linked.filter(**{f"{id_field}__in": provider_ids}).exclude(members=user):
+        org.members.add(user)
+    for org in linked.filter(members=user).exclude(**{f"{id_field}__in": provider_ids}):
+        org.members.remove(user)
+
+
+def _sync_repository_access(user, platform, repository_filter, provider_repos_found):
+    from django.utils import timezone
+
+    from organizations.models import Repository, RepositoryAccess
+
+    repositories = Repository.objects.filter(platform=platform)
+    allowed = repositories.filter(repository_filter).exclude(product__organization__members=user)
+    for repository in allowed:
+        RepositoryAccess.objects.update_or_create(
+            user=user, repository=repository, defaults={"checked_at": timezone.now()}
+        )
+    if provider_repos_found:
+        RepositoryAccess.objects.filter(user=user, repository__platform=platform).exclude(
+            repository__in=allowed
+        ).delete()
+
+
+def _sync_github(user, timeout):
+    from django.db.models import Q
+
+    headers = {"Authorization": f"token {user.github_access_token}", "Accept": "application/json"}
+    profile = requests.get("https://api.github.com/user", headers=headers, timeout=timeout)
+    orgs = _fetch_paginated("https://api.github.com/user/orgs", headers, {"per_page": 100}, timeout)
+    if profile.status_code == 200 and orgs is not None:
+        ids = [profile.json().get("id")] + [org.get("id") for org in orgs]
+        _sync_organization_membership(user, "github_org_id", [i for i in ids if i])
+
+    collaborator = _fetch_paginated(
+        "https://api.github.com/user/repos",
+        headers,
+        {"affiliation": "collaborator", "per_page": 100},
+        timeout,
+    )
+    if collaborator is not None:
+        ids = [repo.get("id") for repo in collaborator if repo.get("id")]
+        names = [repo.get("full_name") for repo in collaborator if repo.get("full_name")]
+        _sync_repository_access(
+            user, "github", Q(github_repo_id__in=ids) | Q(github_full_name__in=names), True
+        )
+
+
+def _sync_gitlab(user, timeout):
+    from django.db.models import Q
+
+    headers = {"Authorization": f"Bearer {user.gitlab_access_token}", "Accept": "application/json"}
+    base = "https://gitlab.com/api/v4"
+    groups = _fetch_paginated(f"{base}/groups", headers, {"min_access_level": 10, "per_page": 100}, timeout)
+    if groups is not None:
+        _sync_organization_membership(user, "gitlab_group_id", [group.get("id") for group in groups])
+
+    projects = _fetch_paginated(
+        f"{base}/projects", headers, {"membership": "true", "simple": "true", "per_page": 100}, timeout
+    )
+    if projects is not None:
+        ids = [project.get("id") for project in projects if project.get("id")]
+        _sync_repository_access(user, "gitlab", Q(gitlab_project_id__in=ids), True)
+
+
+def sync_provider_memberships(user):
+    """
+    Alinha o que o usuário vê no MSG ao que ele vê no GitHub/GitLab: entra/sai das Organizations
+    vinculadas ao provedor e registra o acesso aos repositórios em que é só colaborador.
+    Falhas do provedor são ignoradas, para nunca quebrar o login.
+    """
+    from django.conf import settings
+
+    timeout = getattr(settings, "GITHUB_TIMEOUT", 10)
+    syncs = (
+        (user.github_access_token, _sync_github),
+        (user.gitlab_access_token, _sync_gitlab),
+    )
+    for token, sync in syncs:
+        if not token:
+            continue
+        try:
+            sync(user, timeout)
+        except Exception as exc:
+            logger.warning("Falha ao sincronizar acessos do provedor para %s: %s", user, exc)
