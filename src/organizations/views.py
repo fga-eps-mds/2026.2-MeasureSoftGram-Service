@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from django.core.cache import cache
 from django.conf import settings
 
-from organizations.access import is_member, visible_repositories
+from organizations.access import fresh_access_q, is_member, visible_repositories
 from organizations.mixins import UserScopedMixin
 from organizations.utils import (
     GITHUB_REPOS_PER_PAGE,
@@ -52,7 +52,7 @@ class ProductViewSet(UserScopedMixin, viewsets.ModelViewSet):
         qs = Product.objects.all().order_by("-id").select_related("organization").prefetch_related("repositories")
         qs = qs.filter(organization=org)
         if not is_member(self.request.user, org):
-            qs = qs.filter(repositories__accesses__user=self.request.user).distinct()
+            qs = qs.filter(fresh_access_q(self.request.user, "repositories__")).distinct()
         return qs
 
     def perform_create(self, serializer):

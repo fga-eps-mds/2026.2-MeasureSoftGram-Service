@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import requests
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 
 from organizations.models import Repository, RepositoryAccess
@@ -16,12 +17,34 @@ def is_member(user, organization):
     return organization.members.filter(pk=user.pk).exists()
 
 
+def fresh_access_q(user, prefix=""):
+    """
+    Filtro dos acessos do provedor ainda válidos (checados há menos de `ACCESS_TTL`). `prefix` leva o filtro
+    até o `accesses` a partir do modelo consultado (ex.: `repositories__`); usuário e data ficam no mesmo
+    `Q`, para valerem para o mesmo acesso.
+    """
+    return Q(**{f"{prefix}accesses__user": user, f"{prefix}accesses__checked_at__gte": timezone.now() - ACCESS_TTL})
+
+
+def refresh_expired_accesses(user):
+    """
+    Revalida no provedor os acessos vencidos do usuário: os que o provedor ainda libera voltam a valer e os
+    revogados são apagados. Sem isso as listagens esconderiam o repositório 10 minutos depois do login.
+    """
+    from organizations.utils import refresh_repository_access
+
+    expired = RepositoryAccess.objects.filter(user=user, checked_at__lt=timezone.now() - ACCESS_TTL)
+    platforms = set(expired.values_list("repository__platform", flat=True))
+    if platforms:
+        refresh_repository_access(user, platforms)
+
+
 def visible_repositories(product, user):
     """Repositórios do produto que o usuário vê: todos para membros, só os liberados pelo provedor aos demais."""
     repositories = product.repositories.all()
     if is_member(user, product.organization):
         return repositories
-    return repositories.filter(accesses__user=user)
+    return repositories.filter(fresh_access_q(user))
 
 
 def _provider_token(user, platform):

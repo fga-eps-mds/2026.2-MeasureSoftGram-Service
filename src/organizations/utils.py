@@ -339,8 +339,6 @@ def _sync_repository_access(user, platform, repository_filter, provider_repos_fo
 
 
 def _sync_github(user, timeout):
-    from django.db.models import Q
-
     headers = {"Authorization": f"token {user.github_access_token}", "Accept": "application/json"}
     profile = requests.get("https://api.github.com/user", headers=headers, timeout=timeout)
     orgs = _fetch_paginated("https://api.github.com/user/orgs", headers, {"per_page": 100}, timeout)
@@ -348,6 +346,13 @@ def _sync_github(user, timeout):
         ids = [profile.json().get("id")] + [org.get("id") for org in orgs]
         _sync_organization_membership(user, "github_org_id", [i for i in ids if i])
 
+    _sync_github_repository_access(user, timeout)
+
+
+def _sync_github_repository_access(user, timeout):
+    from django.db.models import Q
+
+    headers = {"Authorization": f"token {user.github_access_token}", "Accept": "application/json"}
     collaborator = _fetch_paginated(
         "https://api.github.com/user/repos",
         headers,
@@ -363,16 +368,24 @@ def _sync_github(user, timeout):
 
 
 def _sync_gitlab(user, timeout):
-    from django.db.models import Q
-
     headers = {"Authorization": f"Bearer {user.gitlab_access_token}", "Accept": "application/json"}
     base = "https://gitlab.com/api/v4"
     groups = _fetch_paginated(f"{base}/groups", headers, {"min_access_level": 10, "per_page": 100}, timeout)
     if groups is not None:
         _sync_organization_membership(user, "gitlab_group_id", [group.get("id") for group in groups])
 
+    _sync_gitlab_repository_access(user, timeout)
+
+
+def _sync_gitlab_repository_access(user, timeout):
+    from django.db.models import Q
+
+    headers = {"Authorization": f"Bearer {user.gitlab_access_token}", "Accept": "application/json"}
     projects = _fetch_paginated(
-        f"{base}/projects", headers, {"membership": "true", "simple": "true", "per_page": 100}, timeout
+        "https://gitlab.com/api/v4/projects",
+        headers,
+        {"membership": "true", "simple": "true", "per_page": 100},
+        timeout,
     )
     if projects is not None:
         ids = [project.get("id") for project in projects if project.get("id")]
@@ -399,3 +412,24 @@ def sync_provider_memberships(user):
             sync(user, timeout)
         except Exception as exc:
             logger.warning("Falha ao sincronizar acessos do provedor para %s: %s", user, exc)
+
+
+def refresh_repository_access(user, platforms):
+    """
+    Renova, com o token do usuário, o acesso aos repositórios em que ele é só colaborador, nas plataformas
+    dadas. Falha do provedor é ignorada: os acessos vencidos continuam ocultos até a próxima checagem.
+    """
+    from django.conf import settings
+
+    timeout = getattr(settings, "GITHUB_TIMEOUT", 10)
+    refreshes = (
+        ("github", user.github_access_token, _sync_github_repository_access),
+        ("gitlab", user.gitlab_access_token, _sync_gitlab_repository_access),
+    )
+    for platform, token, refresh in refreshes:
+        if platform not in platforms or not token:
+            continue
+        try:
+            refresh(user, timeout)
+        except Exception as exc:
+            logger.warning("Falha ao renovar acessos do provedor para %s: %s", user, exc)

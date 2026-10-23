@@ -8,7 +8,7 @@ from rest_framework.reverse import reverse
 from rest_framework.validators import UniqueValidator
 
 import utils
-from organizations.access import is_member, visible_repositories
+from organizations.access import fresh_access_q, is_member, visible_repositories
 from organizations.models import Organization, Product, Repository
 from tsqmi.models import TSQMI
 from tsqmi.serializers import TSQMISerializer
@@ -58,7 +58,7 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
         products = obj.products.all()
         user = self.context["request"].user
         if not is_member(user, obj):
-            products = products.filter(repositories__accesses__user=user).distinct()
+            products = products.filter(fresh_access_q(user, "repositories__")).distinct()
         for product in products:
             url = reverse(
                 "product-detail",

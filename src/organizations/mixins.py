@@ -4,7 +4,13 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import SAFE_METHODS
 
-from organizations.access import find_repository, has_repository_access
+from organizations.access import (
+    find_repository,
+    fresh_access_q,
+    has_repository_access,
+    refresh_expired_accesses,
+    visible_repositories,
+)
 from organizations.models import Organization, Product, Repository
 
 
@@ -20,29 +26,42 @@ class UserScopedMixin:
     def _read_only_request(self):
         return self.request.method in SAFE_METHODS
 
+    def _refresh_provider_accesses(self):
+        """Revalida os acessos vencidos uma vez por requisição, antes de qualquer listagem de leitura."""
+        if not getattr(self.request, "_provider_accesses_refreshed", False):
+            self.request._provider_accesses_refreshed = True
+            refresh_expired_accesses(self.request.user)
+
     def get_user_organizations(self):
         user = self.request.user
         if not self._read_only_request():
             return Organization.objects.filter(members=user)
+        self._refresh_provider_accesses()
         return Organization.objects.filter(
-            Q(members=user) | Q(products__repositories__accesses__user=user)
+            Q(members=user) | fresh_access_q(user, "products__repositories__")
         ).distinct()
 
     def get_user_products(self):
         user = self.request.user
         if not self._read_only_request():
             return Product.objects.filter(organization__members=user)
+        self._refresh_provider_accesses()
         return Product.objects.filter(
-            Q(organization__members=user) | Q(repositories__accesses__user=user)
+            Q(organization__members=user) | fresh_access_q(user, "repositories__")
         ).distinct()
 
     def get_user_repositories(self):
         user = self.request.user
         if not self._read_only_request():
             return Repository.objects.filter(product__organization__members=user)
+        self._refresh_provider_accesses()
         return Repository.objects.filter(
-            Q(product__organization__members=user) | Q(accesses__user=user)
+            Q(product__organization__members=user) | fresh_access_q(user)
         ).distinct()
+
+    def get_visible_repositories(self, product):
+        """Repositórios do produto que o usuário pode ver: todos para membros, só os liberados aos demais."""
+        return visible_repositories(product, self.request.user)
 
     def get_organization(self):
         org_pk = self.kwargs.get("organization_pk") or self.kwargs.get("pk")
@@ -51,7 +70,8 @@ class UserScopedMixin:
     def get_product(self):
         org_pk = self.kwargs.get("organization_pk")
         prod_pk = self.kwargs.get("product_pk") or self.kwargs.get("pk")
-        return get_object_or_404(self.get_user_products().filter(organization_id=org_pk), id=prod_pk)
+        products = self.get_user_products().filter(organization_id=org_pk).select_related("organization")
+        return get_object_or_404(products, id=prod_pk)
 
     def get_repository(self):
         org_pk = self.kwargs.get("organization_pk")
