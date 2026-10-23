@@ -33,14 +33,14 @@ TOTALS = {
 }
 
 
-def get_release_summary(release: Release, configuration) -> dict:
+def get_release_summary(release: Release, configuration, visible=None) -> dict:
     """
     Totais da Visão Geral na release. Cada total conta entidades distintas, e não
     linhas do histórico: as entidades da configuração da release, os repositórios
     com análise na janela da release e os arquivos (`qualifier = FIL`) coletados nela.
     """
     entities = get_configured_entities(configuration) if configuration else None
-    repositories_ids = [repository.id for repository in get_release_repositories(release)]
+    repositories_ids = [repository.id for repository in get_release_repositories(release, visible)]
 
     analyzed_repositories = (
         filter_release_window(TSQMI.objects.filter(repository_id__in=repositories_ids), release)
@@ -75,7 +75,7 @@ def get_release_summary(release: Release, configuration) -> dict:
     }
 
 
-def get_release_characteristics(release: Release, configuration) -> dict:
+def get_release_characteristics(release: Release, configuration, visible=None) -> dict:
     """
     Valor de cada característica da configuração em cada repositório da release
     (radar) e, por característica, o planejado (meta da release) e a média e o
@@ -84,7 +84,7 @@ def get_release_characteristics(release: Release, configuration) -> dict:
     """
     keys = get_configured_keys(configuration, CHARACTERISTIC)
     names = get_entity_names(CHARACTERISTIC, keys)
-    repositories = get_release_repositories(release)
+    repositories = get_release_repositories(release, visible)
     repositories_ids = [repository.id for repository in repositories]
 
     values = get_entity_values(CHARACTERISTIC, release, repositories_ids, keys)
