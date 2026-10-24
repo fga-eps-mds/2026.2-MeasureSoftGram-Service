@@ -7,7 +7,7 @@ from rest_framework.test import APIClient
 
 from metrics.models import CollectedMetric
 from organizations.models import Repository
-from organizations.utils import get_default_mock_payload, onboard_repository_async
+from organizations.utils import onboard_repository_async
 from utils.tests import APITestCaseExpanded
 
 
@@ -491,11 +491,6 @@ class OnboardRepositoryTestCase(APITestCaseExpanded):
 
         self.assertFalse(CollectedMetric.objects.filter(repository=self.repository).exists())
         self.assertFalse(TSQMI.objects.filter(repository=self.repository).exists())
-
-    def test_get_default_mock_payload(self):
-        payload = get_default_mock_payload()
-        self.assertIn("github", payload)
-        self.assertIn("sonarqube", payload)
 
     def test_tsqmi_latest_and_history_serializers(self):
         from tsqmi.models import TSQMI
