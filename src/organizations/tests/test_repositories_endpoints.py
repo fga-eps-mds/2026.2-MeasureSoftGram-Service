@@ -492,6 +492,48 @@ class OnboardRepositoryTestCase(APITestCaseExpanded):
         self.assertFalse(CollectedMetric.objects.filter(repository=self.repository).exists())
         self.assertFalse(TSQMI.objects.filter(repository=self.repository).exists())
 
+    def assert_repository_without_data(self):
+        from characteristics.models import CalculatedCharacteristic
+        from measures.models import CalculatedMeasure
+        from subcharacteristics.models import CalculatedSubCharacteristic
+        from tsqmi.models import TSQMI
+
+        for model in (
+            CollectedMetric,
+            CalculatedMeasure,
+            CalculatedSubCharacteristic,
+            CalculatedCharacteristic,
+            TSQMI,
+        ):
+            with self.subTest(model=model.__name__):
+                self.assertFalse(model.objects.filter(repository=self.repository).exists())
+
+    @patch("organizations.utils.requests.post")
+    @patch("organizations.utils.requests.get")
+    def test_onboard_repository_async_without_github_token_persists_nothing(self, mock_get, mock_post):
+        self.user.github_access_token = None
+
+        with self.assertLogs("organizations.utils", level="WARNING") as logs:
+            onboard_repository_async(self.repository, self.user)
+
+        mock_get.assert_not_called()
+        mock_post.assert_not_called()
+        self.assertIn("No GitHub Actions triggered for Test Repo", logs.output[0])
+        self.assert_repository_without_data()
+
+    @patch("organizations.utils.requests.post")
+    @patch("organizations.utils.requests.get")
+    def test_onboard_repository_async_without_github_full_name_persists_nothing(self, mock_get, mock_post):
+        self.repository.github_full_name = ""
+
+        with self.assertLogs("organizations.utils", level="WARNING") as logs:
+            onboard_repository_async(self.repository, self.user)
+
+        mock_get.assert_not_called()
+        mock_post.assert_not_called()
+        self.assertIn("No GitHub Actions triggered for Test Repo", logs.output[0])
+        self.assert_repository_without_data()
+
     def test_tsqmi_latest_and_history_serializers(self):
         from tsqmi.models import TSQMI
 
