@@ -468,7 +468,7 @@ class OnboardRepositoryTestCase(APITestCaseExpanded):
         self.assertEqual(kwargs["json"], {"ref": "develop"})
 
     @patch("organizations.utils.requests.get")
-    def test_onboard_repository_async_fallback_mock(self, mock_get):
+    def test_onboard_repository_async_without_workflow_persists_nothing(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"workflows": []}
@@ -476,15 +476,10 @@ class OnboardRepositoryTestCase(APITestCaseExpanded):
 
         from tsqmi.models import TSQMI
 
-        self.assertEqual(
-            CollectedMetric.objects.filter(repository=self.repository).count(),
-            0,
-        )
-
         onboard_repository_async(self.repository, self.user)
 
-        self.assertTrue(CollectedMetric.objects.filter(repository=self.repository).count() > 0)
-        self.assertTrue(TSQMI.objects.filter(repository=self.repository).count() > 0)
+        self.assertFalse(CollectedMetric.objects.filter(repository=self.repository).exists())
+        self.assertFalse(TSQMI.objects.filter(repository=self.repository).exists())
 
     @patch("organizations.utils.requests.get")
     def test_onboard_repository_async_exception_handled(self, mock_get):
@@ -494,7 +489,8 @@ class OnboardRepositoryTestCase(APITestCaseExpanded):
 
         onboard_repository_async(self.repository, self.user)
 
-        self.assertTrue(TSQMI.objects.filter(repository=self.repository).count() > 0)
+        self.assertFalse(CollectedMetric.objects.filter(repository=self.repository).exists())
+        self.assertFalse(TSQMI.objects.filter(repository=self.repository).exists())
 
     def test_get_default_mock_payload(self):
         payload = get_default_mock_payload()
