@@ -15,11 +15,9 @@ from releases.analysis_distribution import TSQMI_LEVEL, EntityNotConfigured, get
 from releases.correlation import LEVELS as CORRELATION_LEVELS
 from releases.correlation import get_correlation
 from releases.dashboard import (
-    get_configured_keys,
     get_product_tsqmi_release_history,
-    get_release_characteristics,
+    get_release_repositories_tsqmi,
     get_release_summary,
-    get_repository_release_history,
 )
 from releases.entity_analysis import (
     LEVELS,
@@ -347,8 +345,9 @@ class CorrelationViewSet(UserScopedMixin, viewsets.ViewSet):
 
 class ReleaseDashboardViewSet(ReleaseScopedMixin, viewsets.ViewSet):
     """
-    Visão Geral de Qualidade por release (US07.01): totais, radar, planejado ×
-    realizado e TSQMI por repositório. Qualquer membro da organização tem acesso.
+    Visão Geral de Qualidade por release (US07.01): totais e Indicador Total da Qualidade
+    (TSQMI) por repositório. O planejado × realizado e o radar usam o analysis_data da
+    release. Qualquer membro da organização tem acesso.
     """
 
     permission_classes = (IsAuthenticated,)
@@ -368,8 +367,7 @@ class ReleaseDashboardViewSet(ReleaseScopedMixin, viewsets.ViewSet):
         if release is None:
             return Response({"detail": RELEASE_ID_REQUIRED}, status=400)
 
-        configuration = resolve_release_configuration(release.product, release)
-        return Response(get_release_characteristics(release, configuration))
+        return Response(get_release_repositories_tsqmi(release))
 
 
 class ProductTsqmiReleaseHistoryViewSet(UserScopedMixin, viewsets.ViewSet):
@@ -391,26 +389,3 @@ class ProductTsqmiReleaseHistoryViewSet(UserScopedMixin, viewsets.ViewSet):
             repositories = [get_object_or_404(repositories, id=int(repository_id))]
 
         return Response(get_product_tsqmi_release_history(product, list(repositories)))
-
-
-class RepositoryReleaseHistoryViewSet(UserScopedMixin, viewsets.ViewSet):
-    """
-    Evolução de um nível do modelo no repositório, com um ponto por release
-    (US07.01): Evolução Temporal e gráfico da tela do repositório.
-    """
-
-    permission_classes = (IsAuthenticated,)
-
-    def list(self, request, *args, **kwargs):
-        repository = self.get_repository()
-        level = request.query_params.get("level")
-
-        if level not in LEVELS:
-            return Response({"detail": f"O parâmetro level deve ser um de: {', '.join(LEVELS)}."}, status=400)
-
-        keys = [key.strip() for key in request.query_params.get("keys", "").split(",") if key.strip()]
-        if not keys:
-            # sem keys, vale a configuração atual do produto
-            keys = get_configured_keys(resolve_release_configuration(repository.product), level)
-
-        return Response(get_repository_release_history(repository, level, keys))
