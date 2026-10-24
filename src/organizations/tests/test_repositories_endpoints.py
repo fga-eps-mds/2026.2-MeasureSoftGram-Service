@@ -467,30 +467,70 @@ class OnboardRepositoryTestCase(APITestCaseExpanded):
         args, kwargs = mock_post.call_args
         self.assertEqual(kwargs["json"], {"ref": "develop"})
 
+    @patch("organizations.utils.requests.post")
     @patch("organizations.utils.requests.get")
-    def test_onboard_repository_async_without_workflow_persists_nothing(self, mock_get):
+    def test_onboard_repository_async_workflows_request_failed_persists_nothing(self, mock_get, mock_post):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_get.return_value = mock_resp
+
+        with self.assertLogs("organizations.utils", level="WARNING") as logs:
+            onboard_repository_async(self.repository, self.user)
+
+        mock_post.assert_not_called()
+        self.assertIn("No GitHub Actions triggered for Test Repo", logs.output[-1])
+        self.assert_repository_without_data()
+
+    @patch("organizations.utils.requests.post")
+    @patch("organizations.utils.requests.get")
+    def test_onboard_repository_async_without_workflow_persists_nothing(self, mock_get, mock_post):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"workflows": []}
         mock_get.return_value = mock_resp
 
-        from tsqmi.models import TSQMI
+        with self.assertLogs("organizations.utils", level="WARNING") as logs:
+            onboard_repository_async(self.repository, self.user)
 
-        onboard_repository_async(self.repository, self.user)
+        mock_post.assert_not_called()
+        self.assertIn("No GitHub Actions triggered for Test Repo", logs.output[-1])
+        self.assert_repository_without_data()
 
-        self.assertFalse(CollectedMetric.objects.filter(repository=self.repository).exists())
-        self.assertFalse(TSQMI.objects.filter(repository=self.repository).exists())
+    @patch("organizations.utils.requests.get")
+    @patch("organizations.utils.requests.post")
+    def test_onboard_repository_async_dispatch_failed_persists_nothing(self, mock_post, mock_get):
+        def side_effect(url, headers=None, timeout=None):
+            resp = MagicMock()
+            resp.status_code = 200
+            if "/actions/workflows" in url:
+                resp.json.return_value = {"workflows": [{"id": 123, "name": "CI/CD Measure Flow"}]}
+            else:
+                resp.json.return_value = {"default_branch": "develop"}
+            return resp
+
+        mock_get.side_effect = side_effect
+
+        mock_post_resp = MagicMock()
+        mock_post_resp.status_code = 422
+        mock_post.return_value = mock_post_resp
+
+        with self.assertLogs("organizations.utils", level="WARNING") as logs:
+            onboard_repository_async(self.repository, self.user)
+
+        self.assertTrue(mock_post.called)
+        self.assertIn("No GitHub Actions triggered for Test Repo", logs.output[-1])
+        self.assert_repository_without_data()
 
     @patch("organizations.utils.requests.get")
     def test_onboard_repository_async_exception_handled(self, mock_get):
         mock_get.side_effect = Exception("GitHub API down")
 
-        from tsqmi.models import TSQMI
+        with self.assertLogs("organizations.utils", level="WARNING") as logs:
+            onboard_repository_async(self.repository, self.user)
 
-        onboard_repository_async(self.repository, self.user)
-
-        self.assertFalse(CollectedMetric.objects.filter(repository=self.repository).exists())
-        self.assertFalse(TSQMI.objects.filter(repository=self.repository).exists())
+        self.assertIn("Error checking/triggering GitHub Actions for my-org/test-repo", logs.output[0])
+        self.assertIn("No GitHub Actions triggered for Test Repo", logs.output[-1])
+        self.assert_repository_without_data()
 
     def assert_repository_without_data(self):
         from characteristics.models import CalculatedCharacteristic
