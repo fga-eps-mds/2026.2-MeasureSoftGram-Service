@@ -1,12 +1,11 @@
 """
-Dados dos dashboards por release (US07.01): Visão Geral de Qualidade, Evolução
-Temporal e gráfico da tela do repositório, para o Front desenhar sem o Grafana.
+Dados da Visão Geral de Qualidade por release (US07.01), para o Front desenhar sem o Grafana.
 
-O valor de uma entidade numa release é o último calculado dentro da janela da
-release (ver `releases.service.get_latest_values_in_release_window`).
+O planejado × realizado e o radar usam o `analysis-data` da release, e a Evolução Temporal e a
+tela do repositório usam `historical-values/*` (correções do PO de 21/10). Aqui ficam os totais
+e o Indicador Total da Qualidade (TSQMI) de cada repositório na release: o último calculado
+dentro da janela da release (ver `releases.service.filter_release_window`).
 """
-
-from statistics import mean, pstdev
 
 from metrics.models import CollectedMetric
 from releases.entity_analysis import (
@@ -15,8 +14,6 @@ from releases.entity_analysis import (
     METRIC,
     SUBCHARACTERISTIC,
     get_configured_entities,
-    get_entity_names,
-    get_entity_values,
     get_release_repositories,
     serialize_value,
     unique_by_key,
@@ -75,80 +72,89 @@ def get_release_summary(release: Release, configuration, visible=None) -> dict:
     }
 
 
-def get_release_characteristics(release: Release, configuration, visible=None) -> dict:
-    """
-    Valor de cada característica da configuração em cada repositório da release
-    (radar) e, por característica, o planejado (meta da release) e a média e o
-    desvio padrão entre os repositórios (planejado × realizado). Traz também o
-    TSQMI de cada repositório na release.
-    """
-    keys = get_configured_keys(configuration, CHARACTERISTIC)
-    names = get_entity_names(CHARACTERISTIC, keys)
+def get_release_repositories_tsqmi(release: Release, visible=None) -> dict:
+    """Indicador Total da Qualidade (TSQMI) de cada repositório na release; `value: null` sem análise na janela."""
     repositories = get_release_repositories(release, visible)
-    repositories_ids = [repository.id for repository in repositories]
-
-    values = get_entity_values(CHARACTERISTIC, release, repositories_ids, keys)
-    tsqmis = get_latest_tsqmis(release, repositories_ids)
-
-    characteristics = []
-    for key in keys:
-        accomplished = [values[(id_, key)].value for id_ in repositories_ids if (id_, key) in values]
-        characteristics.append(
-            {
-                "key": key,
-                "name": names.get(key, key),
-                "planned": _get_planned(release, key),
-                "accomplished": mean(accomplished) if accomplished else None,
-                "dispersion": pstdev(accomplished) if accomplished else None,
-            }
-        )
+    tsqmis = get_latest_tsqmis(release, [repository.id for repository in repositories])
 
     return {
         "release": serialize_release(release),
-        "characteristics": characteristics,
         "repositories": [
             {
                 "id": repository.id,
                 "name": repository.name,
                 "tsqmi": serialize_value(tsqmis.get(repository.id)),
-                "characteristics": [{"key": key, **serialize_value(values.get((repository.id, key)))} for key in keys],
             }
             for repository in repositories
         ],
     }
 
 
-def get_repository_release_history(repository, level: str, keys: list) -> dict:
+def get_product_tsqmi_release_history(product, repositories: list) -> dict:
     """
-    Um ponto por release para cada entidade do nível no repositório (Evolução
-    Temporal e tela do repositório). Entram as releases do produto em que o
-    repositório está em `get_release_repositories`, da mais antiga para a mais nova.
-    """
-    releases = get_repository_releases(repository)
-    names = get_entity_names(level, keys)
-    # chaves que não existem no sistema ficam de fora
-    keys = [key for key in keys if key in names]
+    Histórico do TSQMI por release (US06.01): um ponto por release para cada
+    repositório, com a variação em relação à release anterior do mesmo repositório.
 
-    values_by_release = {release.id: get_entity_values(level, release, [repository.id], keys) for release in releases}
+    Entram as releases do produto em que o repositório está em `get_release_repositories`,
+    da mais antiga para a mais nova. Sem release cadastrada, `releases` vem vazia e cada
+    repositório vem com `history` vazio (empty state do Front).
+    """
+    releases = list(Release.objects.filter(product_id=product.id).select_related("product").order_by("start_at", "id"))
+    repositories_ids = {repository.id for repository in repositories}
+
+    releases_by_repository = {repository.id: [] for repository in repositories}
+    tsqmis_by_release = {}
+    for release in releases:
+        release_repositories_ids = [
+            repository.id for repository in get_release_repositories(release) if repository.id in repositories_ids
+        ]
+        for repository_id in release_repositories_ids:
+            releases_by_repository[repository_id].append(release)
+        tsqmis_by_release[release.id] = get_latest_tsqmis(release, release_repositories_ids)
 
     return {
-        "repository": {"id": repository.id, "name": repository.name},
-        "level": level,
         "releases": [serialize_release(release) for release in releases],
-        "entities": [
+        "repositories": [
             {
-                "key": key,
-                "name": names[key],
-                "history": [
-                    {
-                        "release_id": release.id,
-                        **serialize_value(values_by_release[release.id].get((repository.id, key))),
-                    }
-                    for release in releases
-                ],
+                "id": repository.id,
+                "name": repository.name,
+                "history": _get_tsqmi_history(repository, releases_by_repository[repository.id], tsqmis_by_release),
             }
-            for key in keys
+            for repository in repositories
         ],
+    }
+
+
+def _get_tsqmi_history(repository, releases: list, tsqmis_by_release: dict) -> list:
+    history = []
+    previous_value = None
+    for release in releases:
+        tsqmi = tsqmis_by_release[release.id].get(repository.id)
+        value = serialize_value(tsqmi)
+        history.append(
+            {
+                "release_id": release.id,
+                **value,
+                **_get_variation(previous_value, value["value"]),
+            }
+        )
+        previous_value = value["value"]
+    return history
+
+
+def _get_variation(previous_value, value) -> dict:
+    """
+    Variação em relação à release imediatamente anterior. Sem valor numa das duas
+    (primeira release ou release sem análise), a variação vem `None`; com a anterior
+    igual a zero, só a variação percentual vem `None`.
+    """
+    if previous_value is None or value is None:
+        return {"previous_value": previous_value, "variation": None, "variation_percent": None}
+    variation = value - previous_value
+    return {
+        "previous_value": previous_value,
+        "variation": variation,
+        "variation_percent": variation / previous_value * 100 if previous_value else None,
     }
 
 
@@ -177,11 +183,6 @@ def serialize_release(release: Release) -> dict:
         "start_at": release.start_at,
         "end_at": release.end_at,
     }
-
-
-def _get_planned(release: Release, key: str):
-    goal = release.goal.data.get(key)
-    return goal / 100 if goal is not None else None
 
 
 def get_latest_tsqmis(release: Release, repositories_ids: list) -> dict:

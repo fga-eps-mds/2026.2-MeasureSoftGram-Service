@@ -40,6 +40,7 @@ class ReleaseDashboardTestCase(APITestCaseExpanded):
         self.product_url = f"/api/v1/organizations/{self.org.id}/products/{self.product.id}/"
         self.summary_url = f"{self.product_url}release-dashboard/summary/"
         self.characteristics_url = f"{self.product_url}release-dashboard/characteristics/"
+        self.tsqmi_release_history_url = f"{self.product_url}repositories-tsqmi-release-history/"
 
     def create_release(self, name, start_at, end_at):
         return Release.objects.create(
@@ -50,9 +51,6 @@ class ReleaseDashboardTestCase(APITestCaseExpanded):
             product=self.product,
             goal=self.goal,
         )
-
-    def release_history_url(self, repository):
-        return f"{self.product_url}repositories/{repository.id}/release-history/"
 
     def calculated_characteristic(self, repository, key, value, created_at):
         return CalculatedCharacteristic.objects.create(
@@ -92,7 +90,7 @@ class ReleaseDashboardTestCase(APITestCaseExpanded):
         return [
             (self.summary_url, {"release_id": self.release.id}),
             (self.characteristics_url, {"release_id": self.release.id}),
-            (self.release_history_url(self.api), {"level": "characteristic"}),
+            (self.tsqmi_release_history_url, {}),
         ]
 
 
@@ -179,62 +177,13 @@ class ReleaseSummaryTestCase(ReleaseDashboardTestCase):
         self.assertEqual(response.json()["release"]["release_name"], "v1.0")
 
 
-class ReleaseCharacteristicsTestCase(ReleaseDashboardTestCase):
+class ReleaseRepositoriesTsqmiTestCase(ReleaseDashboardTestCase):
+    """release-dashboard/characteristics: só o Indicador Total da Qualidade de cada repositório (correções do PO)."""
+
     def get_data(self):
         response = self.client.get(self.characteristics_url, {"release_id": self.release.id})
         self.assertEqual(response.status_code, 200)
         return response.json()
-
-    def repository_values(self, data, name):
-        repository = next(item for item in data["repositories"] if item["name"] == name)
-        return {item["key"]: item["value"] for item in repository["characteristics"]}
-
-    def characteristic(self, data, key):
-        return next(item for item in data["characteristics"] if item["key"] == key)
-
-    def test_radar_uses_latest_value_inside_release_window_and_not_the_average(self):
-        self.calculated_characteristic(self.api, "reliability", 0.2, local_datetime(2026, 3, 5))
-        self.calculated_characteristic(self.api, "reliability", 0.8, local_datetime(2026, 3, 25))
-        self.calculated_characteristic(self.api, "reliability", 0.1, local_datetime(2026, 4, 5))
-
-        self.assertEqual(self.repository_values(self.get_data(), "api")["reliability"], 0.8)
-
-    def test_radar_lists_every_configured_characteristic_for_every_repository(self):
-        self.calculated_characteristic(self.api, "reliability", 0.8, local_datetime(2026, 3, 5))
-
-        data = self.get_data()
-
-        self.assertEqual(
-            [item["key"] for item in data["characteristics"]],
-            ["reliability", "maintainability", "functional_suitability"],
-        )
-        self.assertEqual(
-            self.repository_values(data, "api"),
-            {"reliability": 0.8, "maintainability": None, "functional_suitability": None},
-        )
-        self.assertEqual(set(self.repository_values(data, "web").values()), {None})
-
-    def test_planned_comes_from_release_goal(self):
-        data = self.get_data()
-
-        self.assertEqual(self.characteristic(data, "reliability")["planned"], 0.7)
-        self.assertEqual(self.characteristic(data, "maintainability")["planned"], 0.6)
-        self.assertIsNone(self.characteristic(data, "functional_suitability")["planned"])
-
-    def test_accomplished_is_mean_and_dispersion_between_repositories(self):
-        self.calculated_characteristic(self.api, "reliability", 0.6, local_datetime(2026, 3, 5))
-        self.calculated_characteristic(self.web, "reliability", 0.8, local_datetime(2026, 3, 5))
-
-        reliability = self.characteristic(self.get_data(), "reliability")
-
-        self.assertAlmostEqual(reliability["accomplished"], 0.7)
-        self.assertAlmostEqual(reliability["dispersion"], 0.1)
-
-    def test_characteristic_without_value_has_no_accomplished(self):
-        maintainability = self.characteristic(self.get_data(), "maintainability")
-
-        self.assertIsNone(maintainability["accomplished"])
-        self.assertIsNone(maintainability["dispersion"])
 
     def test_tsqmi_is_latest_value_inside_release_window(self):
         self.tsqmi(self.api, 0.5, local_datetime(2026, 3, 5))
@@ -246,94 +195,168 @@ class ReleaseCharacteristicsTestCase(ReleaseDashboardTestCase):
 
         self.assertEqual(tsqmi_by_repository, {"api": 0.9, "web": None})
 
+    def test_returns_only_the_release_and_the_tsqmi_of_each_repository(self):
+        # o planejado × realizado e o radar usam o analysis_data da release
+        self.calculated_characteristic(self.api, "reliability", 0.8, local_datetime(2026, 3, 5))
 
-class RepositoryReleaseHistoryTestCase(ReleaseDashboardTestCase):
+        data = self.get_data()
+
+        self.assertEqual(set(data), {"release", "repositories"})
+        self.assertEqual(data["release"]["id"], self.release.id)
+        for repository in data["repositories"]:
+            self.assertEqual(set(repository), {"id", "name", "tsqmi"})
+
+    def test_lists_only_release_repositories_when_release_has_them(self):
+        self.release.repositories.add(self.api)
+
+        self.assertEqual([item["name"] for item in self.get_data()["repositories"]], ["api"])
+
+
+class ProductTsqmiReleaseHistoryTestCase(ReleaseDashboardTestCase):
     def setUp(self):
         super().setUp()
         self.release_2 = self.create_release("v2.0", local_datetime(2026, 4, 1), local_datetime(2026, 4, 30))
 
-    def get_history(self, level="characteristic", keys=None, repository=None):
-        params = {"level": level}
-        if keys:
-            params["keys"] = keys
-        response = self.client.get(self.release_history_url(repository or self.api), params)
+    def get_history(self, **params):
+        response = self.client.get(self.tsqmi_release_history_url, params)
         self.assertEqual(response.status_code, 200)
         return response.json()
 
-    def history_of(self, data, key):
-        entity = next(item for item in data["entities"] if item["key"] == key)
-        return [point["value"] for point in entity["history"]]
+    def history_of(self, data, repository):
+        return next(item["history"] for item in data["repositories"] if item["id"] == repository.id)
 
-    def test_one_point_per_release_with_latest_value_in_each_window(self):
-        self.calculated_characteristic(self.api, "reliability", 0.4, local_datetime(2026, 3, 5))
-        self.calculated_characteristic(self.api, "reliability", 0.5, local_datetime(2026, 3, 25))
-        self.calculated_characteristic(self.api, "reliability", 0.7, local_datetime(2026, 4, 10))
+    def values_of(self, data, repository):
+        return [point["value"] for point in self.history_of(data, repository)]
 
-        data = self.get_history(keys="reliability")
+    def test_one_point_per_release_with_latest_tsqmi_in_each_window(self):
+        self.tsqmi(self.api, 0.4, local_datetime(2026, 3, 5))
+        self.tsqmi(self.api, 0.5, local_datetime(2026, 3, 25))
+        self.tsqmi(self.api, 0.7, local_datetime(2026, 4, 10))
+
+        data = self.get_history()
 
         self.assertEqual([release["release_name"] for release in data["releases"]], ["v1.0", "v2.0"])
-        self.assertEqual(self.history_of(data, "reliability"), [0.5, 0.7])
+        self.assertEqual(self.values_of(data, self.api), [0.5, 0.7])
 
-    def test_release_without_value_is_null(self):
-        self.calculated_characteristic(self.api, "reliability", 0.7, local_datetime(2026, 4, 10))
+    def test_last_day_of_release_counts(self):
+        self.tsqmi(self.api, 0.4, local_datetime(2026, 3, 5))
+        self.tsqmi(self.api, 0.6, local_datetime(2026, 3, 31, 18))
 
-        self.assertEqual(self.history_of(self.get_history(keys="reliability"), "reliability"), [None, 0.7])
+        self.assertEqual(self.values_of(self.get_history(), self.api)[0], 0.6)
+
+    def test_every_repository_is_a_series_over_the_same_releases(self):
+        self.tsqmi(self.api, 0.5, local_datetime(2026, 3, 5))
+        self.tsqmi(self.web, 0.8, local_datetime(2026, 4, 5))
+
+        data = self.get_history()
+
+        self.assertEqual([repository["name"] for repository in data["repositories"]], ["api", "web"])
+        self.assertEqual(self.values_of(data, self.api), [0.5, None])
+        self.assertEqual(self.values_of(data, self.web), [None, 0.8])
+
+    def test_variation_is_relative_to_previous_release(self):
+        self.tsqmi(self.api, 0.5, local_datetime(2026, 3, 5))
+        self.tsqmi(self.api, 0.6, local_datetime(2026, 4, 5))
+
+        second = self.history_of(self.get_history(), self.api)[1]
+
+        self.assertEqual(second["previous_value"], 0.5)
+        self.assertAlmostEqual(second["variation"], 0.1)
+        self.assertAlmostEqual(second["variation_percent"], 20)
+
+    def test_first_release_has_no_variation(self):
+        self.tsqmi(self.api, 0.5, local_datetime(2026, 3, 5))
+
+        first = self.history_of(self.get_history(), self.api)[0]
+
+        self.assertEqual(first["value"], 0.5)
+        self.assertIsNone(first["previous_value"])
+        self.assertIsNone(first["variation"])
+        self.assertIsNone(first["variation_percent"])
+
+    def test_previous_release_without_tsqmi_has_no_variation(self):
+        self.tsqmi(self.api, 0.6, local_datetime(2026, 4, 5))
+
+        second = self.history_of(self.get_history(), self.api)[1]
+
+        self.assertIsNone(second["previous_value"])
+        self.assertIsNone(second["variation"])
+        self.assertIsNone(second["variation_percent"])
+
+    def test_previous_release_with_zero_has_variation_but_no_percent(self):
+        self.tsqmi(self.api, 0, local_datetime(2026, 3, 5))
+        self.tsqmi(self.api, 0.4, local_datetime(2026, 4, 5))
+
+        second = self.history_of(self.get_history(), self.api)[1]
+
+        self.assertAlmostEqual(second["variation"], 0.4)
+        self.assertIsNone(second["variation_percent"])
+
+    def test_skips_releases_that_do_not_include_the_repository(self):
+        self.release_2.repositories.add(self.web)
+        self.tsqmi(self.api, 0.5, local_datetime(2026, 3, 5))
+        self.tsqmi(self.api, 0.9, local_datetime(2026, 4, 5))
+
+        data = self.get_history()
+
+        self.assertEqual([point["release_id"] for point in self.history_of(data, self.api)], [self.release.id])
+        self.assertEqual(
+            [point["release_id"] for point in self.history_of(data, self.web)],
+            [self.release.id, self.release_2.id],
+        )
+
+    def test_variation_skips_releases_that_do_not_include_the_repository(self):
+        release_3 = self.create_release("v3.0", local_datetime(2026, 5, 1), local_datetime(2026, 5, 31))
+        self.release_2.repositories.add(self.web)
+        self.tsqmi(self.api, 0.5, local_datetime(2026, 3, 5))
+        self.tsqmi(self.api, 0.6, local_datetime(2026, 5, 5))
+
+        history = self.history_of(self.get_history(), self.api)
+
+        self.assertEqual([point["release_id"] for point in history], [self.release.id, release_3.id])
+        self.assertEqual(history[1]["previous_value"], 0.5)
 
     def test_releases_are_ordered_from_oldest_to_newest(self):
         self.create_release("v0.9", local_datetime(2026, 2, 1), local_datetime(2026, 2, 28))
 
-        data = self.get_history(keys="reliability")
+        data = self.get_history()
 
         self.assertEqual([release["release_name"] for release in data["releases"]], ["v0.9", "v1.0", "v2.0"])
 
-    def test_skips_releases_that_do_not_include_the_repository(self):
-        self.release_2.repositories.add(self.web)
+    def test_product_without_releases_returns_empty_history(self):
+        Release.objects.filter(product=self.product).delete()
+        self.tsqmi(self.api, 0.5, local_datetime(2026, 3, 5))
 
-        data = self.get_history(keys="reliability")
-
-        self.assertEqual([release["release_name"] for release in data["releases"]], ["v1.0"])
-
-    def test_release_pointing_only_to_another_product_repository_includes_every_product_repository(self):
-        other_product = self.get_product(self.org, name="Outro produto")
-        self.release_2.repositories.add(self.get_repository(other_product, name="outro"))
-
-        data = self.get_history(keys="reliability")
-
-        self.assertEqual([release["release_name"] for release in data["releases"]], ["v1.0", "v2.0"])
-
-    def test_without_keys_uses_configured_entities_of_the_level(self):
         data = self.get_history()
 
-        self.assertEqual(
-            [entity["key"] for entity in data["entities"]],
-            ["reliability", "maintainability", "functional_suitability"],
-        )
+        self.assertEqual(data["releases"], [])
+        self.assertEqual([repository["history"] for repository in data["repositories"]], [[], []])
 
-    def test_unknown_keys_are_ignored(self):
-        data = self.get_history(keys="reliability,does_not_exist")
+    def test_history_appears_once_product_has_releases(self):
+        Release.objects.filter(product=self.product).delete()
+        self.tsqmi(self.api, 0.5, local_datetime(2026, 3, 5))
+        self.assertEqual(self.get_history()["releases"], [])
 
-        self.assertEqual([entity["key"] for entity in data["entities"]], ["reliability"])
+        self.create_release("v1.0", local_datetime(2026, 3, 1), local_datetime(2026, 3, 31))
 
-    def test_metric_level_uses_project_value_and_not_files(self):
-        self.collected_metric(self.api, "coverage", 80, local_datetime(2026, 3, 5), "TRK")
-        self.collected_metric(self.api, "coverage", 10, local_datetime(2026, 3, 6), "FIL", "src/main.py")
+        self.assertEqual(self.values_of(self.get_history(), self.api), [0.5])
 
-        data = self.get_history(level="metric", keys="coverage")
+    def test_repository_id_filters_a_single_repository(self):
+        data = self.get_history(repository_id=self.web.id)
 
-        self.assertEqual(self.history_of(data, "coverage"), [80, None])
-
-    def test_invalid_level_returns_400(self):
-        response = self.client.get(self.release_history_url(self.api), {"level": "tsqmi"})
-
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual([repository["id"] for repository in data["repositories"]], [self.web.id])
 
     def test_repository_of_another_product_returns_404(self):
-        other_product = self.get_product(self.org, name="Outro produto")
-        other_repository = self.get_repository(other_product, name="outro")
+        other_repository = self.get_repository(self.get_product(self.org, name="Outro produto"), name="outro")
 
-        response = self.client.get(self.release_history_url(other_repository), {"level": "characteristic"})
+        response = self.client.get(self.tsqmi_release_history_url, {"repository_id": other_repository.id})
 
         self.assertEqual(response.status_code, 404)
+
+    def test_invalid_repository_id_returns_400(self):
+        response = self.client.get(self.tsqmi_release_history_url, {"repository_id": "abc"})
+
+        self.assertEqual(response.status_code, 400)
 
 
 class ReleaseDashboardAccessTestCase(ReleaseDashboardTestCase):
@@ -379,3 +402,11 @@ class ReleaseDashboardAccessTestCase(ReleaseDashboardTestCase):
         for url in (self.summary_url, self.characteristics_url):
             with self.subTest(url=url):
                 self.assertEqual(self.client.get(url, {"release_id": other_release.id}).status_code, 404)
+
+    def test_release_history_was_removed(self):
+        # a Evolução Temporal e a tela do repositório usam historical-values/* (correções do PO)
+        response = self.client.get(
+            f"{self.product_url}repositories/{self.api.id}/release-history/", {"level": "characteristic"}
+        )
+
+        self.assertEqual(response.status_code, 404)

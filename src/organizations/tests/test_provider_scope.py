@@ -61,6 +61,16 @@ class CollaboratorProductScopeTestCase(ProviderVisibilityBase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([r["id"] for r in response.json()["repositories"]], [self.repo.id])
 
+    def test_tsqmi_release_history_only_lists_visible_repositories(self):
+        url = f"{self.product_url}repositories-tsqmi-release-history/"
+
+        response = self.client.get(url)
+        other = self.client.get(url, {"repository_id": self.other_repo.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([r["id"] for r in response.json()["repositories"]], [self.repo.id])
+        self.assertEqual(other.status_code, 404)
+
     def test_entity_matrix_only_lists_visible_repositories(self):
         response = self.client.get(
             f"{self.product_url}entity-analysis/matrix/", {"release_id": self.release.id, "level": "characteristic"}
