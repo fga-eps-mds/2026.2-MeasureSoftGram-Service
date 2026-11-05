@@ -870,7 +870,8 @@
 													"description": "Obrigatório abaixo do TSQMI. No nível metric, só as métricas TRK (GitHub)."
 												}
 											]
-										}
+										},
+										"description": "O summary traz, entre outros campos, std e variance: desvio padrão e variância amostrais (n − 1 no denominador), os mesmos do DESVPAD.A e do VAR.A. Vêm null com menos de 2 análises e 0 com todos os valores iguais."
 									},
 									"response": []
 								},
