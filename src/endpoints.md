@@ -351,6 +351,7 @@ Erros: parâmetro ausente, nível inválido, entidade fora da configuração da 
 - `p10`, `q1`, `median`, `q3` e `p90` pelo método `inclusive`, o mesmo do `QUARTIL.INC` e do `PERCENTIL.INC` das planilhas.
 - `iqr` = Q3 − Q1; `lower_limit` = Q1 − 1,5 × IQR; `upper_limit` = Q3 + 1,5 × IQR; `outliers` é a quantidade de análises fora dos limites.
 - `skewness`: assimetria amostral ajustada, a mesma do `DISTORÇÃO`: n / ((n − 1)(n − 2)) · Σ((x − média) / s)³, com s amostral. `null` com menos de 3 análises ou com desvio zero.
+- `std` e `variance`: desvio padrão e variância amostrais (n − 1 no denominador), os mesmos do `DESVPAD.A` e do `VAR.A`. `null` com menos de 2 análises e 0 com todos os valores iguais.
 - Sem análise, `count` e `outliers` vêm 0 e os demais campos `null`. Com uma análise, todos os quantis são o próprio valor e o IQR é 0.
 - Os valores vêm sem arredondamento.
 
@@ -366,7 +367,7 @@ Erros: parâmetro ausente, nível inválido, entidade fora da configuração da 
     "analyses": [{"date": "2026-08-17T10:02:00-03:00", "value": 0.55, "is_outlier": false}],
     "summary": {"count": 60, "min": 0.2, "p10": 0.43, "q1": 0.49, "median": 0.55, "q3": 0.62, "p90": 0.66,
                 "max": 0.9, "iqr": 0.13, "lower_limit": 0.295, "upper_limit": 0.815, "outliers": 3,
-                "mean": 0.55, "skewness": -0.16}
+                "mean": 0.55, "skewness": -0.16, "std": 0.12, "variance": 0.0144}
   },
   "children": [
     {"key": "testing_status", "name": "Testing Status", "level": "subcharacteristic", "metric_type": null, "analyses": [...], "summary": {...}}
