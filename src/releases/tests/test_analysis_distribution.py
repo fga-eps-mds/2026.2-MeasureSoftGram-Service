@@ -28,6 +28,7 @@ def local_datetime(*args):
 #   QUARTIL.INC(A1:A10; 2)     = 0,535     QUARTIL.INC(A1:A10; 3) = 0,61
 #   PERCENTIL.INC(A1:A10; 0,9) = 0,684     MÉDIA(A1:A10)          = 0,54
 #   DISTORÇÃO(A1:A10)          = 0,178488933752135
+#   DESVPAD.A(A1:A10)          = 0,17975291683617      VAR.A(A1:A10)          = 0,0323111111111111
 #   IQR = 0,15; limites = 0,235 e 0,835; discrepantes: 0,2 e 0,9
 REFERENCE_SERIES = [0.55, 0.2, 0.62, 0.49, 0.9, 0.43, 0.66, 0.58, 0.45, 0.52]
 
@@ -60,6 +61,8 @@ class SummarizeTestCase(SimpleTestCase):
                 "upper_limit": 0.835,
                 "mean": 0.54,
                 "skewness": 0.178488933752135,
+                "std": 0.17975291683617,
+                "variance": 0.0323111111111111,
             },
         )
 
@@ -68,7 +71,7 @@ class SummarizeTestCase(SimpleTestCase):
 
         self.assertEqual(summary["count"], 0)
         self.assertEqual(summary["outliers"], 0)
-        for field in ("min", "p10", "q1", "median", "q3", "p90", "max", "iqr", "mean", "skewness"):
+        for field in ("min", "p10", "q1", "median", "q3", "p90", "max", "iqr", "mean", "skewness", "std", "variance"):
             self.assertIsNone(summary[field], field)
 
     def test_one_value(self):
@@ -82,14 +85,27 @@ class SummarizeTestCase(SimpleTestCase):
         )
         self.assertEqual(summary["mean"], 0.7)
         self.assertIsNone(summary["skewness"])
+        self.assertIsNone(summary["std"])
+        self.assertIsNone(summary["variance"])
 
     def test_two_values_have_no_skewness(self):
         # QUARTIL.INC({0,4; 0,8}; 1..3) = 0,5 / 0,6 / 0,7; PERCENTIL.INC 0,1 e 0,9 = 0,44 e 0,76
+        # DESVPAD.A = 0,282842712474619; VAR.A = 0,08
         summary = summarize([0.8, 0.4])
 
         self.assertSummary(
             summary,
-            {"p10": 0.44, "q1": 0.5, "median": 0.6, "q3": 0.7, "p90": 0.76, "mean": 0.6, "skewness": None},
+            {
+                "p10": 0.44,
+                "q1": 0.5,
+                "median": 0.6,
+                "q3": 0.7,
+                "p90": 0.76,
+                "mean": 0.6,
+                "skewness": None,
+                "std": 0.282842712474619,
+                "variance": 0.08,
+            },
         )
 
     def test_three_values_have_skewness(self):
@@ -107,6 +123,8 @@ class SummarizeTestCase(SimpleTestCase):
         self.assertEqual(summary["iqr"], 0)
         self.assertEqual(summary["outliers"], 0)
         self.assertIsNone(summary["skewness"])
+        self.assertEqual(summary["std"], 0)
+        self.assertEqual(summary["variance"], 0)
 
 
 class AnalysisDistributionEndpointTestCase(APITestCaseExpanded):

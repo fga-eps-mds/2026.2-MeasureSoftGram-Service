@@ -8,7 +8,7 @@ sem ligar as camadas pela data, então os dados antigos (em que as camadas da
 mesma análise têm instantes um pouco diferentes) entram sem tolerância.
 """
 
-from statistics import fmean, quantiles, stdev
+from statistics import fmean, quantiles, stdev, variance
 
 from rest_framework import serializers
 
@@ -48,7 +48,9 @@ def summarize(values):
 
     Quartis e percentis pelo método `inclusive`, o mesmo do QUARTIL.INC e do
     PERCENTIL.INC das planilhas. A assimetria é a amostral ajustada, a mesma do
-    DISTORÇÃO, e fica `None` com menos de 3 análises ou com desvio zero.
+    DISTORÇÃO, e fica `None` com menos de 3 análises ou com desvio zero. O desvio
+    padrão e a variância são os amostrais, os mesmos do DESVPAD.A e do VAR.A, e ficam
+    `None` com menos de 2 análises.
     """
     if not values:
         return {
@@ -57,6 +59,8 @@ def summarize(values):
             "outliers": 0,
             "mean": None,
             "skewness": None,
+            "std": None,
+            "variance": None,
         }
 
     ordered = sorted(values)
@@ -87,6 +91,8 @@ def summarize(values):
         "outliers": sum(1 for value in ordered if value < lower_limit or value > upper_limit),
         "mean": fmean(ordered),
         "skewness": skewness(ordered),
+        "std": stdev(ordered) if len(ordered) > 1 else None,
+        "variance": variance(ordered) if len(ordered) > 1 else None,
     }
 
 
