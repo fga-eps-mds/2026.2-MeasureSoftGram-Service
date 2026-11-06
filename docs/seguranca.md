@@ -112,8 +112,11 @@ Antes de integrar o PR, combine com o responsável pela infraestrutura:
 4. Provisionar a chave de cifragem e backup, sem registrá-los em logs.
 5. Atualizar `CSRF_TRUSTED_ORIGINS`, `FRONTEND_PROD_URL`,
    `LOGIN_REDIRECT_URL`, URL da API no Front e callback do OAuth App para
-   HTTPS. Confirmar que `ALLOWED_HOSTS` inclui o domínio e `localhost` para
-   o healthcheck interno.
+   HTTPS. Confirmar que `ALLOWED_HOSTS` inclui o domínio, `localhost` para
+   o healthcheck interno e `service`, host pelo qual o BFF do Front chama o
+   Service dentro da rede do Docker. As chamadas internas enviam
+   `X-Forwarded-Proto: https`; sem esse cabeçalho, `SECURE_SSL_REDIRECT`
+   responde 301 para `https://service`.
 6. Implantar em janela coordenada: o entrypoint executa a migration antes
    de iniciar o serviço. Não manter instâncias antigas gravando em paralelo.
 7. Executar os testes externos abaixo e anexar os resultados ao PR/issue.
