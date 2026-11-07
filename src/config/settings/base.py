@@ -273,6 +273,10 @@ AMBIENT_TEST_OR_DEV = os.getenv("AMBIENT_TEST_OR_DEV", "True").lower() in (
     "1",
 )
 
+# Dados de demonstração sob pedido para repositórios sem coleta (math_model/demo.py).
+# São calculados na hora e nunca gravados; DEMO_DATA_ENABLED=false desliga o endpoint.
+DEMO_DATA_ENABLED = os.getenv("DEMO_DATA_ENABLED", "True").lower() in ("true", "t", "1")
+
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
 GITHUB_TIMEOUT = int(os.getenv("GITHUB_TIMEOUT", "10"))

@@ -1,6 +1,8 @@
+from django.conf import settings
 from rest_framework import mixins, status, viewsets
 from rest_framework.response import Response
 
+from math_model.demo import build_demo_data, repository_has_real_data
 from math_model.services import MathModelServices
 from organizations.mixins import UserScopedMixin
 from release_configuration.serializers import ReleaseConfigurationSerializer
@@ -62,3 +64,32 @@ class CalculateMathModelViewSet(
             )
 
         return Response(response, status=status.HTTP_201_CREATED)
+
+
+class DemoDataViewSet(UserScopedMixin, viewsets.ViewSet):
+    """Dados de demonstração de um repositório sem coleta real (ver math_model/demo.py).
+
+    GET devolve o TSQMI e o histórico das características calculados na hora,
+    marcados com is_demo=True. Nada é gravado no banco.
+    """
+
+    def list(self, request, *args, **kwargs):
+        if not settings.DEMO_DATA_ENABLED:
+            return Response(
+                {"detail": "Dados de demonstração desativados neste ambiente."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        repository = self.get_repository()
+        if repository_has_real_data(repository):
+            return Response(
+                {"detail": "Este repositório já tem dados coletados; a demonstração só vale sem coleta real."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        try:
+            data = build_demo_data(repository)
+        except CalculateModelException as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(data)

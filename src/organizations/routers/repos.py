@@ -2,7 +2,7 @@ from characteristics.views import (
     CalculatedCharacteristicHistoryModelViewSet,
     LatestCalculatedCharacteristicModelViewSet,
 )
-from math_model.views import CalculateMathModelViewSet
+from math_model.views import CalculateMathModelViewSet, DemoDataViewSet
 from measures.views import CalculatedMeasureHistoryModelViewSet, LatestCalculatedMeasureModelViewSet
 from metrics.views import CollectedMetricHistoryModelViewSet, LatestCollectedMetricModelViewSet
 from organizations.routers.routers import Router
@@ -37,6 +37,11 @@ class RepoRouter(Router):
                 "name": "calculate/math-model",
                 "view": CalculateMathModelViewSet,
                 "basename": "math-model",
+            },
+            {
+                "name": "demo-data",
+                "view": DemoDataViewSet,
+                "basename": "demo-data",
             },
         ]
 
