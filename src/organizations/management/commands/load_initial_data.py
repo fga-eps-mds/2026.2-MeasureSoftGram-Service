@@ -112,7 +112,7 @@ class Command(BaseCommand):
 
                 measure, _ = SupportedMeasure.objects.get_or_create(
                     key=measure_key,
-                    name=measure_name,
+                    defaults={"name": measure_name},
                 )
 
                 logger.info(f"Creating supported measure {measure_key}")
@@ -141,7 +141,7 @@ class Command(BaseCommand):
 
                 measure, _ = SupportedMeasure.objects.get_or_create(
                     key=measure_key,
-                    name=measure_name,
+                    defaults={"name": measure_name},
                 )
 
                 logger.info(f"Creating supported measure {measure_key}")

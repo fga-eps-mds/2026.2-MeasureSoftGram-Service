@@ -1,6 +1,7 @@
 ﻿import os
 from unittest.mock import Mock, patch
 
+from django.conf import settings
 from django.core.management import call_command
 
 from django.db.utils import IntegrityError
@@ -238,6 +239,19 @@ class SupportedMeasureMetricsAssociationTestCase(TestCase):
 
         measure = SupportedMeasure.objects.get(key=measure_key)
         expected_keys = set(SUPPORTED_MEASURES[0][measure_key]["metrics"])
+        self.assertEqual(set(measure.metrics.values_list("key", flat=True)), expected_keys)
+
+    def test_associa_as_metricas_da_medida_do_github_ja_cadastrada_com_outro_nome(self):
+        command = Command()
+        command.create_github_supported_metrics()
+        measure_data = settings.GITHUB_SUPPORTED_MEASURES[0]
+        measure_key = next(iter(measure_data))
+        SupportedMeasure.objects.create(key=measure_key, name="Nome editado à mão")
+
+        command.create_github_suported_measures()
+
+        measure = SupportedMeasure.objects.get(key=measure_key)
+        expected_keys = set(measure_data[measure_key]["metrics"])
         self.assertEqual(set(measure.metrics.values_list("key", flat=True)), expected_keys)
 
 
