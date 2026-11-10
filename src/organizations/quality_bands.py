@@ -3,7 +3,7 @@ Faixas de qualidade do produto (US30.01): a régua de 0 a 1 que pinta os gráfic
 
 São 5 faixas, da pior para a melhor (E a A), separadas por 4 cortes. O produto guarda só os
 cortes em `Product.quality_band_limits`; `None` quer dizer que ele nunca alterou a régua e usa
-os padrões daqui, o único lugar onde eles são definidos.
+os padrões daqui. O `GRADE_MAP` de `utils/badge.py` ainda repete esses cortes até a US30.03.
 """
 
 from decimal import Decimal
@@ -88,10 +88,11 @@ def _continuity_errors(bands: list) -> list:
         if previous and band["min"] != previous["max"]:
             detail = f"A faixa {band['key']} começa onde a faixa {previous['key']} termina "
             errors.append(error(band["key"], "min", detail + f"({format_limit(previous['max'])})."))
-        elif band["max"] <= band["min"] and index == len(bands) - 1:
-            # a faixa A termina em 1: quem a esvazia é o fim da faixa B
-            detail = f"O limite precisa ser menor que {format_limit(band['max'])}."
-            errors.append(error(previous["key"], "max", detail))
+        elif index == len(bands) - 1:
+            # a faixa A termina em 1 (se não terminar, o erro já é o de _edge_errors): quem a esvazia é o fim da B
+            if band["max"] == HIGHEST and band["max"] <= band["min"]:
+                detail = f"O limite precisa ser menor que {format_limit(HIGHEST)}."
+                errors.append(error(previous["key"], "max", detail))
         elif band["max"] <= band["min"]:
             errors.append(error(band["key"], "max", f"O limite precisa ser maior que {format_limit(band['min'])}."))
     return errors
@@ -120,7 +121,8 @@ def field_errors(serializer_errors: dict, data) -> list:
                 errors.append(shape_error)
                 continue
             errors.extend(error(band, field, str(message)) for message in messages)
-    return errors
+    # com alguma faixa fora do formato, o erro de formato vale para a régua toda: uma vez só
+    return [shape_error] if shape_error in errors else errors
 
 
 def limits_of(bands: list):

@@ -190,6 +190,32 @@ class QualityBandsValidationTests(QualityBandsTestCase):
     def test_limit_that_is_not_a_number(self):
         self.assert_rejected(bands_from(0.2, "abc", 0.6, 0.8), "D", "max", "Use um número entre 0 e 1.")
 
+    def test_imprecise_float_gets_the_decimal_places_message(self):
+        bands = bands_from(0.2, 0.4, 0.6, 0.30000000000000004)
+        self.assert_rejected(bands, "B", "max", "Use no máximo duas casas decimais.")
+
+    def test_large_number_gets_the_range_message(self):
+        self.assert_rejected(bands_from(0.2, 0.4, 0.6, 123456), "B", "max", "Use um valor entre 0 e 1.")
+
+    def test_null_and_missing_limits_get_a_message_in_portuguese(self):
+        bands = bands_from(0.2, 0.4, 0.6, 0.8)
+        bands[1]["max"] = None
+        self.assert_rejected(bands, "D", "max", "Use um número entre 0 e 1.")
+
+        bands = bands_from(0.2, 0.4, 0.6, 0.8)
+        del bands[2]["min"]
+        self.assert_rejected(bands, "C", "min", "Use um número entre 0 e 1.")
+
+    def test_band_a_not_ending_at_one_blames_only_band_a(self):
+        bands = bands_from(0.2, 0.4, 0.6, 0.9)
+        bands[4]["max"] = 0.9
+
+        response = self.put(bands)
+
+        self.assertEqual(
+            response.json()["errors"], [{"band": "A", "field": "max", "detail": "A faixa A termina em 1."}]
+        )
+
     def test_body_without_bands(self):
         response = self.client.put(self.url, {}, format="json")
 
@@ -204,6 +230,14 @@ class QualityBandsValidationTests(QualityBandsTestCase):
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertEqual(response.json()["errors"][0]["field"], "bands")
                 self.assertIsNone(self.saved_limits())
+
+    def test_shape_error_is_reported_once(self):
+        response = self.client.put(self.url, {"bands": ["x", "y", "z", "w", "v"]}, format="json")
+
+        self.assertEqual(
+            response.json()["errors"],
+            [{"band": None, "field": "bands", "detail": "Envie as 5 faixas na ordem E, D, C, B e A."}],
+        )
 
 
 class QualityBandsRestoreTests(QualityBandsTestCase):

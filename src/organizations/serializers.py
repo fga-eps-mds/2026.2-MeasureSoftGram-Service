@@ -523,16 +523,18 @@ class RepositoriesTSQMIHistorySerializer(serializers.ModelSerializer):
 
 LIMIT_ERROR_MESSAGES = {
     "invalid": "Use um número entre 0 e 1.",
-    "max_whole_digits": "Use um valor entre 0 e 1.",
-    "max_digits": "Use um valor entre 0 e 1.",
+    "null": "Use um número entre 0 e 1.",
+    "required": "Use um número entre 0 e 1.",
     "max_decimal_places": "Use no máximo duas casas decimais.",
 }
 
 
 class QualityBandSerializer(serializers.Serializer):
+    # sem max_digits: um float como 0.30000000000000004 cai em max_decimal_places, e não na mensagem do intervalo,
+    # que fica com quality_bands._range_errors
     key = serializers.CharField()
-    min = serializers.DecimalField(max_digits=5, decimal_places=2, error_messages=LIMIT_ERROR_MESSAGES)
-    max = serializers.DecimalField(max_digits=5, decimal_places=2, error_messages=LIMIT_ERROR_MESSAGES)
+    min = serializers.DecimalField(max_digits=None, decimal_places=2, error_messages=LIMIT_ERROR_MESSAGES)
+    max = serializers.DecimalField(max_digits=None, decimal_places=2, error_messages=LIMIT_ERROR_MESSAGES)
 
 
 class QualityBandsSerializer(serializers.Serializer):

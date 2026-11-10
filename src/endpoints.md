@@ -479,7 +479,7 @@ Uma régua inválida recebe `400` e não grava nada. `errors` traz um item por f
 | Faixas fora da ordem E a A, faltando ou sobrando | `null` | `key` | Envie as 5 faixas na ordem E, D, C, B e A. |
 | Corpo sem `bands`, ou faixa que não é objeto | `null` | `bands` | Envie as 5 faixas na ordem E, D, C, B e A. |
 | Valor fora de 0 a 1 | a faixa | `min`/`max` | Use um valor entre 0 e 1. |
-| Valor que não é número | a faixa | `min`/`max` | Use um número entre 0 e 1. |
+| Valor que não é número, nulo ou ausente | a faixa | `min`/`max` | Use um número entre 0 e 1. |
 | Mais de duas casas decimais | a faixa | `min`/`max` | Use no máximo duas casas decimais. |
 | Fim menor ou igual ao início da faixa | a faixa | `max` | O limite precisa ser maior que 0,40. |
 | Fim da faixa B igual a 1 (a faixa A fica vazia) | `B` | `max` | O limite precisa ser menor que 1,00. |
