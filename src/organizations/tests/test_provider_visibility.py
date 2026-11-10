@@ -236,3 +236,17 @@ class ImportGitLabGroupTestCase(APITestCaseExpanded):
         _, client = self._client("x")
         response = client.post(reverse("organizations-import-gitlab-list"), {}, format="json")
         self.assertEqual(response.status_code, 400)
+
+    @patch("organizations.views.requests.get")
+    def test_exposes_gitlab_group_id_read_only(self, mock_get):
+        mock_get.return_value = _response({"id": 77, "name": "Grupo", "avatar_url": None, "description": ""})
+        _, client = self._client("reader")
+        client.post(reverse("organizations-import-gitlab-list"), {"gitlab_group_id": 77}, format="json")
+        org = Organization.objects.get(gitlab_group_id=77)
+
+        detail = client.get(reverse("organization-detail", args=[org.id]))
+        self.assertEqual(detail.json()["gitlab_group_id"], 77)
+
+        created = client.post(reverse("organization-list"), {"name": "Manual", "gitlab_group_id": 999}, format="json")
+        self.assertEqual(created.status_code, 201)
+        self.assertIsNone(Organization.objects.get(id=created.json()["id"]).gitlab_group_id)
