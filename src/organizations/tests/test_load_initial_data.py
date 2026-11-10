@@ -1,6 +1,7 @@
 ﻿import os
 from unittest.mock import Mock, patch
 
+from django.conf import settings
 from django.core.management import call_command
 
 from django.db.utils import IntegrityError
@@ -8,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, TransactionTestCase, override_settings
 
 from characteristics.models import BalanceMatrix, CalculatedCharacteristic, SupportedCharacteristic
-from measures.models import CalculatedMeasure
+from measures.models import CalculatedMeasure, SupportedMeasure
 from organizations.management.commands.load_initial_data import BADGE_DEMO_REPOSITORIES, Command
 from organizations.management.commands.utils import create_balance_matrix
 from goals.models import Goal
@@ -221,6 +222,33 @@ class CoreMetricsRegistrationTestCase(TestCase):
 
         self.assertEqual(registered_keys, expected_keys)
         self.assertEqual(SupportedMetric.objects.count(), 4)
+
+
+class SupportedMeasureMetricsAssociationTestCase(TestCase):
+    def test_associa_as_metricas_a_medida_ja_cadastrada_com_outro_nome(self):
+        """
+        Banco populado à mão: a medida existe com o mesmo `key` e outro `name`. O seed não pode engolir o
+        IntegrityError e deixar a medida sem métricas, o que zera o total de métricas da Visão Geral.
+        """
+        command = Command()
+        command.create_supported_metrics()
+        cases = (
+            (command.create_suported_measures, SUPPORTED_MEASURES),
+            (command.create_github_suported_measures, settings.GITHUB_SUPPORTED_MEASURES),
+        )
+        for create_measures, measures in cases:
+            with self.subTest(create_measures.__name__):
+                measure_key = next(iter(measures[0]))
+                renamed, _ = SupportedMeasure.objects.update_or_create(
+                    key=measure_key, defaults={"name": "Nome editado à mão"}
+                )
+                renamed.metrics.clear()
+
+                create_measures()
+
+                measure = SupportedMeasure.objects.get(key=measure_key)
+                expected_keys = set(measures[0][measure_key]["metrics"])
+                self.assertEqual(set(measure.metrics.values_list("key", flat=True)), expected_keys)
 
 
 @override_settings(CREATE_FAKE_DATA=False)
