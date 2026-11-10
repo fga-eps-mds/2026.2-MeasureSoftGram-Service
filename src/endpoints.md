@@ -418,3 +418,73 @@ Regras:
   "reason": null
 }
 ```
+
+## Faixas de qualidade do produto (US30.01)
+
+A régua de 0 a 1 que pinta os gráficos e os badges: 5 faixas, da pior para a melhor (E a A), separadas por 4 cortes. O produto guarda só os cortes; um produto que nunca alterou a régua usa os padrões 0,20, 0,40, 0,60 e 0,80, definidos em `organizations/quality_bands.py`. As cores e os nomes das faixas ficam no Front e não são configuráveis.
+
+Permissões: membros da organização (e quem tem acesso a algum repositório do produto) leem; só o `admin` da organização altera ou restaura. Um membro que não é o admin recebe `403` no `PUT` e no `DELETE`; quem não é membro recebe `404`.
+
+#### Faixas do produto
+GET /api/v1/organizations/1/products/1/quality-bands/
+
+- `is_default`: `true` enquanto o produto segue os padrões.
+- `can_edit`: se o usuário é o admin da organização (o Front usa para o modo somente leitura).
+- `bands`: as 5 faixas de E a A. A primeira começa em 0, a última termina em 1, e o `max` de uma é o `min` da seguinte.
+
+```json
+{
+  "is_default": true,
+  "can_edit": true,
+  "bands": [
+    {"key": "E", "min": 0.0, "max": 0.2},
+    {"key": "D", "min": 0.2, "max": 0.4},
+    {"key": "C", "min": 0.4, "max": 0.6},
+    {"key": "B", "min": 0.6, "max": 0.8},
+    {"key": "A", "min": 0.8, "max": 1.0}
+  ]
+}
+```
+
+#### Alterar as faixas
+PUT /api/v1/organizations/1/products/1/quality-bands/
+
+O corpo é o `bands` do `GET`, com os novos limites (até duas casas decimais). Responde como o `GET`. Enviar exatamente os padrões volta o produto a `is_default: true`.
+
+```json
+{
+  "bands": [
+    {"key": "E", "min": 0, "max": 0.2},
+    {"key": "D", "min": 0.2, "max": 0.4},
+    {"key": "C", "min": 0.4, "max": 0.7},
+    {"key": "B", "min": 0.7, "max": 0.8},
+    {"key": "A", "min": 0.8, "max": 1}
+  ]
+}
+```
+
+Uma régua inválida recebe `400` e não grava nada. `errors` traz um item por faixa e campo, com o motivo:
+
+| Caso | `band` | `field` | `detail` |
+|---|---|---|---|
+| Faixas fora da ordem E a A, faltando ou sobrando | `null` | `key` | Envie as 5 faixas na ordem E, D, C, B e A. |
+| Corpo sem `bands`, ou faixa que não é objeto | `null` | `bands` | Envie as 5 faixas na ordem E, D, C, B e A. |
+| Valor fora de 0 a 1 | a faixa | `min`/`max` | Use um valor entre 0 e 1. |
+| Valor que não é número | a faixa | `min`/`max` | Use um número entre 0 e 1. |
+| Mais de duas casas decimais | a faixa | `min`/`max` | Use no máximo duas casas decimais. |
+| Fim menor ou igual ao início da faixa | a faixa | `max` | O limite precisa ser maior que 0,40. |
+| Fim da faixa B igual a 1 (a faixa A fica vazia) | `B` | `max` | O limite precisa ser menor que 1,00. |
+| Faixa que não começa onde a anterior termina (buraco ou sobreposição) | a faixa | `min` | A faixa D começa onde a faixa E termina (0,20). |
+| Faixa E que não começa em 0 / faixa A que não termina em 1 | `E` / `A` | `min` / `max` | A faixa E começa em 0. / A faixa A termina em 1. |
+
+```json
+{
+  "detail": "As faixas não foram salvas.",
+  "errors": [{"band": "C", "field": "max", "detail": "O limite precisa ser maior que 0,40."}]
+}
+```
+
+#### Restaurar os padrões
+DELETE /api/v1/organizations/1/products/1/quality-bands/
+
+Limpa a configuração do produto e responde como o `GET`, com `is_default: true`.

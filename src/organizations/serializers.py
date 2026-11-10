@@ -517,3 +517,23 @@ class RepositoriesTSQMIHistorySerializer(serializers.ModelSerializer):
             return TSQMISerializer(qs, many=True).data
         except TSQMI.DoesNotExist:
             return None
+
+
+LIMIT_ERROR_MESSAGES = {
+    "invalid": "Use um número entre 0 e 1.",
+    "max_whole_digits": "Use um valor entre 0 e 1.",
+    "max_digits": "Use um valor entre 0 e 1.",
+    "max_decimal_places": "Use no máximo duas casas decimais.",
+}
+
+
+class QualityBandSerializer(serializers.Serializer):
+    key = serializers.CharField()
+    min = serializers.DecimalField(max_digits=5, decimal_places=2, error_messages=LIMIT_ERROR_MESSAGES)
+    max = serializers.DecimalField(max_digits=5, decimal_places=2, error_messages=LIMIT_ERROR_MESSAGES)
+
+
+class QualityBandsSerializer(serializers.Serializer):
+    """Régua enviada no `PUT` de `quality-bands/`: as 5 faixas de E a A, como o `GET` devolve (US30.01)."""
+
+    bands = QualityBandSerializer(many=True, allow_empty=False)
