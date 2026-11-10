@@ -188,6 +188,8 @@ class CorrelationEndpointTestCase(APITestCaseExpanded):
 
         # com 3 releases as colunas são normais: Pearson de 0,9 / 0,6 / 0,7 contra 0,1 / 0,2 / 0,3
         self.assertEqual(data["method"], "pearson")
+        self.assertEqual([entity["normal"] for entity in data["entities"]], [True, True, True])
+        self.assertEqual(data["release_values"][0]["values"]["functional_suitability"], 0.9)
         self.assertAlmostEqual(self.pairs(data)[("functional_suitability", "reliability")]["coefficient"], -0.6547, 4)
 
     def test_release_without_value_of_an_entity_is_excluded(self):
@@ -208,6 +210,14 @@ class CorrelationEndpointTestCase(APITestCaseExpanded):
         )
         self.assertEqual(data["excluded_releases"], 1)
         self.assertEqual(len(data["pairs"]), 3)
+        self.assertEqual(
+            [(row["release"]["id"], row["used"]) for row in data["release_values"]],
+            [(release.id, release != releases[2]) for release in releases],
+        )
+        self.assertEqual(
+            data["release_values"][2]["values"],
+            {"reliability": 0.3, "maintainability": 0.2, "functional_suitability": None},
+        )
 
     def test_release_closing_rows_are_not_analyses(self):
         releases = self.create_releases(3)
@@ -250,6 +260,8 @@ class CorrelationEndpointTestCase(APITestCaseExpanded):
         self.assertEqual(data["reason"], "insufficient_releases")
         self.assertEqual(data["releases"], [])
         self.assertEqual(data["excluded_releases"], 3)
+        self.assertEqual([row["used"] for row in data["release_values"]], [False, False, False])
+        self.assertEqual([entity["normal"] for entity in data["entities"]], [None, None, None])
 
     def test_product_without_release(self):
         data = self.get().json()
@@ -273,6 +285,7 @@ class CorrelationEndpointTestCase(APITestCaseExpanded):
         pairs = self.pairs(data)
 
         self.assertEqual(data["method"], "spearman")
+        self.assertEqual([entity["normal"] for entity in data["entities"]], [True, False, True])
         for pair in (("maintainability", "reliability"), ("functional_suitability", "maintainability")):
             self.assertIsNone(pairs[pair]["coefficient"])
             self.assertIsNone(pairs[pair]["p_value"])

@@ -35,6 +35,7 @@ def get_correlation(repository, level: str) -> dict:
     As entidades são as da configuração da release mais recente. Cada linha de RD é
     uma release em que o repositório tem valor para todas elas (o da última análise
     na janela da release); as demais ficam de fora e são contadas em `excluded_releases`.
+    `release_values` traz todas as releases, com o valor de cada entidade e se entraram em RD.
     Com menos de 3 releases ou menos de 2 entidades, `pairs` vem vazia e `reason` diz o motivo.
     """
     releases = get_repository_releases(repository)
@@ -45,18 +46,25 @@ def get_correlation(repository, level: str) -> dict:
 
     rows = []
     used_releases = []
+    release_values = []
     for release in releases:
         values = _get_release_values(level, release, repository, keys)
-        if keys and all((repository.id, key) in values for key in keys):
-            rows.append([values[(repository.id, key)].value for key in keys])
+        found = {key: values[(repository.id, key)].value for key in keys if (repository.id, key) in values}
+        used = bool(keys) and len(found) == len(keys)
+        if used:
+            rows.append([found[key] for key in keys])
             used_releases.append(release)
+        release_values.append(
+            {"release": serialize_release(release), "values": {key: found.get(key) for key in keys}, "used": used}
+        )
 
     correlation = {
         "repository": {"id": repository.id, "name": repository.name},
         "level": level,
-        "entities": [{"key": key, "name": names[key]} for key in keys],
+        "entities": [{"key": key, "name": names[key], "normal": None} for key in keys],
         "releases": [serialize_release(release) for release in used_releases],
         "excluded_releases": len(releases) - len(used_releases),
+        "release_values": release_values,
         "method": None,
         "non_normal": None,
         "critical_value": None,
@@ -73,6 +81,9 @@ def get_correlation(repository, level: str) -> dict:
 
     return {
         **correlation,
+        "entities": [
+            {**entity, "normal": normal} for entity, normal in zip(correlation["entities"], result["normal"])
+        ],
         "method": result["method"],
         "non_normal": result["normal"].count(False),
         "critical_value": critical_value(len(rows)),
