@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, TransactionTestCase, override_settings
 
 from characteristics.models import BalanceMatrix, CalculatedCharacteristic, SupportedCharacteristic
-from measures.models import CalculatedMeasure
+from measures.models import CalculatedMeasure, SupportedMeasure
 from organizations.management.commands.load_initial_data import BADGE_DEMO_REPOSITORIES, Command
 from organizations.management.commands.utils import create_balance_matrix
 from goals.models import Goal
@@ -221,6 +221,24 @@ class CoreMetricsRegistrationTestCase(TestCase):
 
         self.assertEqual(registered_keys, expected_keys)
         self.assertEqual(SupportedMetric.objects.count(), 4)
+
+
+class SupportedMeasureMetricsAssociationTestCase(TestCase):
+    def test_associa_as_metricas_a_medida_ja_cadastrada_com_outro_nome(self):
+        """
+        Banco populado à mão: a medida existe com o mesmo `key` e outro `name`. O seed não pode engolir o
+        IntegrityError e deixar a medida sem métricas, o que zera o total de métricas da Visão Geral.
+        """
+        command = Command()
+        command.create_supported_metrics()
+        measure_key = next(iter(SUPPORTED_MEASURES[0]))
+        SupportedMeasure.objects.create(key=measure_key, name="Nome editado à mão")
+
+        command.create_suported_measures()
+
+        measure = SupportedMeasure.objects.get(key=measure_key)
+        expected_keys = set(SUPPORTED_MEASURES[0][measure_key]["metrics"])
+        self.assertEqual(set(measure.metrics.values_list("key", flat=True)), expected_keys)
 
 
 @override_settings(CREATE_FAKE_DATA=False)
