@@ -232,27 +232,23 @@ class SupportedMeasureMetricsAssociationTestCase(TestCase):
         """
         command = Command()
         command.create_supported_metrics()
-        measure_key = next(iter(SUPPORTED_MEASURES[0]))
-        SupportedMeasure.objects.create(key=measure_key, name="Nome editado à mão")
+        cases = (
+            (command.create_suported_measures, SUPPORTED_MEASURES),
+            (command.create_github_suported_measures, settings.GITHUB_SUPPORTED_MEASURES),
+        )
+        for create_measures, measures in cases:
+            with self.subTest(create_measures.__name__):
+                measure_key = next(iter(measures[0]))
+                renamed, _ = SupportedMeasure.objects.update_or_create(
+                    key=measure_key, defaults={"name": "Nome editado à mão"}
+                )
+                renamed.metrics.clear()
 
-        command.create_suported_measures()
+                create_measures()
 
-        measure = SupportedMeasure.objects.get(key=measure_key)
-        expected_keys = set(SUPPORTED_MEASURES[0][measure_key]["metrics"])
-        self.assertEqual(set(measure.metrics.values_list("key", flat=True)), expected_keys)
-
-    def test_associa_as_metricas_da_medida_do_github_ja_cadastrada_com_outro_nome(self):
-        command = Command()
-        command.create_github_supported_metrics()
-        measure_data = settings.GITHUB_SUPPORTED_MEASURES[0]
-        measure_key = next(iter(measure_data))
-        SupportedMeasure.objects.create(key=measure_key, name="Nome editado à mão")
-
-        command.create_github_suported_measures()
-
-        measure = SupportedMeasure.objects.get(key=measure_key)
-        expected_keys = set(measure_data[measure_key]["metrics"])
-        self.assertEqual(set(measure.metrics.values_list("key", flat=True)), expected_keys)
+                measure = SupportedMeasure.objects.get(key=measure_key)
+                expected_keys = set(measures[0][measure_key]["metrics"])
+                self.assertEqual(set(measure.metrics.values_list("key", flat=True)), expected_keys)
 
 
 @override_settings(CREATE_FAKE_DATA=False)

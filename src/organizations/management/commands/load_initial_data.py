@@ -105,40 +105,22 @@ class Command(BaseCommand):
         Função que popula banco de dados com todas as medidas que são
         suportadas atualmente e as métricas que cada medida é dependente
         """
-        for measure_data in SUPPORTED_MEASURES:
-            measure_key = next(iter(measure_data))
-            with contextlib.suppress(IntegrityError):
-                measure_name = utils.namefy(measure_key)
-
-                measure, _ = SupportedMeasure.objects.get_or_create(
-                    key=measure_key,
-                    defaults={"name": measure_name},
-                )
-
-                logger.info(f"Creating supported measure {measure_key}")
-
-                metrics_keys = set(measure_data[measure_key]["metrics"])
-
-                metrics = SupportedMetric.objects.filter(
-                    key__in=metrics_keys,
-                )
-
-                if metrics.count() != len(metrics_keys):
-                    raise exceptions.MissingSupportedMetricException()
-
-                measure.metrics.set(metrics)
-                logger.info(f"Metrics {','.join(metrics_keys)} " f"were associated to {measure_key}")
+        self._create_measures_with_metrics(SUPPORTED_MEASURES)
 
     def create_github_suported_measures(self):
         """
         Função que popula banco de dados com todas as medidas que são
         suportadas atualmente e as métricas que cada medida é dependente
         """
-        for measure_data in settings.GITHUB_SUPPORTED_MEASURES:
+        self._create_measures_with_metrics(settings.GITHUB_SUPPORTED_MEASURES)
+
+    def _create_measures_with_metrics(self, supported_measures):
+        for measure_data in supported_measures:
             measure_key = next(iter(measure_data))
             with contextlib.suppress(IntegrityError):
                 measure_name = utils.namefy(measure_key)
 
+                # `key` é único e `name` não: buscar pelos dois falha em medida já cadastrada com outro nome.
                 measure, _ = SupportedMeasure.objects.get_or_create(
                     key=measure_key,
                     defaults={"name": measure_name},
