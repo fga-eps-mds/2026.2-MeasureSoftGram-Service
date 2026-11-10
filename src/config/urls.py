@@ -19,7 +19,12 @@ from metrics.views import SupportedMetricModelViewSet
 from organizations.routers.organizations import OrgRouter
 from organizations.routers.products import ProductRouter
 from organizations.routers.repos import RepoRouter
-from organizations.views import ImportGitLabGroupViewSet, ImportOrganizationViewSet, OrganizationViewSet
+from organizations.views import (
+    ImportGitLabGroupViewSet,
+    ImportOrganizationViewSet,
+    OrganizationViewSet,
+    ProductQualityBandsViewSet,
+)
 from subcharacteristics.views import SupportedSubCharacteristicModelViewSet
 
 
@@ -74,9 +79,8 @@ schema_view = get_schema_view(
     permission_classes=(permissions.AllowAny,),
 )
 
-REPO_PREFIX = (
-    "api/v1/organizations/<int:organization_pk>/" "products/<int:product_pk>/" "repositories/<int:repository_pk>/"
-)
+PRODUCT_PREFIX = "api/v1/organizations/<int:organization_pk>/products/<int:product_pk>/"
+REPO_PREFIX = PRODUCT_PREFIX + "repositories/<int:repository_pk>/"
 
 urlpatterns = [
     path("health/", health_check, name="health-check"),
@@ -90,6 +94,12 @@ urlpatterns = [
         REPO_PREFIX + "latest-values/characteristics/<str:characteristic_key>/badge/",
         LatestCalculatedCharacteristicBadgeViewSet.as_view({"get": "list"}),
         name="characteristic-badge",
+    ),
+    # recurso único do produto: GET lê, PUT altera e DELETE volta aos padrões (US30.01)
+    path(
+        PRODUCT_PREFIX + "quality-bands/",
+        ProductQualityBandsViewSet.as_view({"get": "retrieve", "put": "update", "delete": "destroy"}),
+        name="product-quality-bands",
     ),
     path(
         "swagger/",

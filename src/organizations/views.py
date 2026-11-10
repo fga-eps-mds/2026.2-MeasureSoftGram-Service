@@ -1,10 +1,12 @@
 import requests
 from rest_framework import mixins, permissions, status, viewsets
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from django.core.cache import cache
 from django.conf import settings
 
+from organizations import quality_bands
 from organizations.access import fresh_access_q, is_member, visible_repositories
 from organizations.mixins import UserScopedMixin
 from organizations.utils import (
@@ -21,6 +23,7 @@ from organizations.models import Organization, Product, Repository
 from organizations.serializers import (
     OrganizationSerializer,
     ProductSerializer,
+    QualityBandsSerializer,
     RepositoriesTSQMIHistorySerializer,
     RepositorySerializer,
     RepositoryTSQMILatestValueSerializer,
@@ -58,6 +61,52 @@ class ProductViewSet(UserScopedMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         org = self.get_organization()
         serializer.save(organization=org)
+
+
+class ProductQualityBandsViewSet(UserScopedMixin, viewsets.ViewSet):
+    """
+    Faixas de qualidade do produto (US30.01). Membros da organização leem; só o admin
+    da organização altera (`PUT`) ou volta aos padrões (`DELETE`).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _can_edit(self, product):
+        return product.organization.admin_id == self.request.user.id
+
+    def _editable_product(self):
+        product = self.get_product()
+        if not self._can_edit(product):
+            raise PermissionDenied("Só o administrador da organização altera as faixas de qualidade.")
+        return product
+
+    def retrieve(self, request, *args, **kwargs):
+        product = self.get_product()
+        return Response(quality_bands.serialize(product, self._can_edit(product)))
+
+    def update(self, request, *args, **kwargs):
+        product = self._editable_product()
+        serializer = QualityBandsSerializer(data=request.data)
+        if serializer.is_valid():
+            errors = quality_bands.validate_bands(serializer.validated_data["bands"])
+        else:
+            errors = quality_bands.field_errors(serializer.errors, request.data)
+
+        if errors:
+            return Response(
+                {"detail": "As faixas não foram salvas.", "errors": errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        product.quality_band_limits = quality_bands.limits_of(serializer.validated_data["bands"])
+        product.save(update_fields=["quality_band_limits"])
+        return Response(quality_bands.serialize(product, can_edit=True))
+
+    def destroy(self, request, *args, **kwargs):
+        product = self._editable_product()
+        product.quality_band_limits = None
+        product.save(update_fields=["quality_band_limits"])
+        return Response(quality_bands.serialize(product, can_edit=True))
 
 
 class RepositoryViewSetMixin(UserScopedMixin):
