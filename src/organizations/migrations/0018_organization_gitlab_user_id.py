@@ -4,7 +4,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('organizations', '0016_organization_gitlab_group_id_repositoryaccess'),
+        ('organizations', '0017_product_quality_band_limits'),
     ]
 
     operations = [
