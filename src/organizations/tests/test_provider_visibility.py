@@ -232,7 +232,62 @@ class ImportGitLabGroupTestCase(APITestCaseExpanded):
         self.assertEqual(response.status_code, 403)
         self.assertFalse(Organization.objects.filter(gitlab_group_id=77).exists())
 
+    @patch("organizations.serializers.requests.head")
+    @patch("organizations.views.requests.get")
+    def test_non_member_needs_import_before_creating_gitlab_repository(self, mock_get, mock_head):
+        # causa do 404 da issue #124: quem não é membro da org não consegue criar repositório nela
+        mock_get.return_value = _response({"id": 77, "name": "Grupo", "avatar_url": None, "description": ""})
+        mock_head.return_value = MagicMock(status_code=200)
+        first, first_client = self._client("first")
+        second, second_client = self._client("second")
+        first_client.post(reverse("organizations-import-gitlab-list"), {"gitlab_group_id": 77}, format="json")
+        org = Organization.objects.get(gitlab_group_id=77)
+        product = org.products.create(name="Prod A")
+        repo_data = {
+            "name": "Repo GL",
+            "url": "https://gitlab.com/grupo/repo",
+            "platform": "gitlab",
+            "imported": True,
+            "gitlab_project_id": 9001,
+            "gitlab_path_with_namespace": "grupo/repo",
+        }
+
+        r_before = second_client.post(
+            reverse("repository-list", args=[org.id, product.id]), repo_data, format="json"
+        )
+        self.assertEqual(r_before.status_code, 404)
+
+        r_import = second_client.post(
+            reverse("organizations-import-gitlab-list"), {"gitlab_group_id": 77}, format="json"
+        )
+        self.assertEqual(r_import.status_code, 201)
+        self.assertIn(second, org.members.all())
+
+        r_product = second_client.post(reverse("product-list", args=[org.id]), {"name": "Prod B"}, format="json")
+        self.assertEqual(r_product.status_code, 201)
+        new_product_id = r_product.json()["id"]
+        r_repo = second_client.post(
+            reverse("repository-list", args=[org.id, new_product_id]), repo_data, format="json"
+        )
+        self.assertEqual(r_repo.status_code, 201)
+        self.assertEqual(r_repo.json()["platform"], "gitlab")
+        self.assertEqual(r_repo.json()["imported"], True)
+
     def test_requires_group_id(self):
         _, client = self._client("x")
         response = client.post(reverse("organizations-import-gitlab-list"), {}, format="json")
         self.assertEqual(response.status_code, 400)
+
+    @patch("organizations.views.requests.get")
+    def test_exposes_gitlab_group_id_read_only(self, mock_get):
+        mock_get.return_value = _response({"id": 77, "name": "Grupo", "avatar_url": None, "description": ""})
+        _, client = self._client("reader")
+        client.post(reverse("organizations-import-gitlab-list"), {"gitlab_group_id": 77}, format="json")
+        org = Organization.objects.get(gitlab_group_id=77)
+
+        detail = client.get(reverse("organization-detail", args=[org.id]))
+        self.assertEqual(detail.json()["gitlab_group_id"], 77)
+
+        created = client.post(reverse("organization-list"), {"name": "Manual", "gitlab_group_id": 999}, format="json")
+        self.assertEqual(created.status_code, 201)
+        self.assertIsNone(Organization.objects.get(id=created.json()["id"]).gitlab_group_id)
