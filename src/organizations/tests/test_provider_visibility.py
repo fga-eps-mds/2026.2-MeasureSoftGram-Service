@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+import requests
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
@@ -291,3 +292,169 @@ class ImportGitLabGroupTestCase(APITestCaseExpanded):
         created = client.post(reverse("organization-list"), {"name": "Manual", "gitlab_group_id": 999}, format="json")
         self.assertEqual(created.status_code, 201)
         self.assertIsNone(Organization.objects.get(id=created.json()["id"]).gitlab_group_id)
+
+
+class ImportGitLabPersonalTestCase(APITestCaseExpanded):
+    def _client(self, username, token="gl"):
+        user = get_user_model().objects.create_user(username=username, password="pass")
+        if token is not None:
+            user.gitlab_access_token = token
+            user.save()
+        client = APIClient()
+        client.force_authenticate(user, token=Token.objects.create(user=user))
+        return user, client
+
+    @patch("organizations.views.requests.get")
+    def test_creates_personal_organization(self, mock_get):
+        mock_get.return_value = _response(
+            {
+                "id": 7,
+                "name": "Joao Silva",
+                "username": "joao",
+                "avatar_url": "https://avatar.png",
+                "bio": "Minha bio",
+            }
+        )
+        user, client = self._client("joao")
+        url = reverse("organizations-import-gitlab-user-list")
+
+        response = client.post(url, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(data["gitlab_user_id"], 7)
+        self.assertEqual(data["name"], "Joao Silva")
+        org = Organization.objects.get(gitlab_user_id=7)
+        self.assertEqual(org.name, "Joao Silva")
+        self.assertEqual(org.avatar_url, "https://avatar.png")
+        self.assertEqual(org.description, "Minha bio")
+        self.assertEqual(org.admin, user)
+        self.assertIn(user, org.members.all())
+
+    @patch("organizations.views.requests.get")
+    def test_calling_twice_does_not_duplicate(self, mock_get):
+        mock_get.return_value = _response(
+            {
+                "id": 7,
+                "name": "Joao Antigo",
+                "username": "joao",
+                "avatar_url": "https://old.png",
+                "bio": "Bio",
+            }
+        )
+        user, client = self._client("joao")
+        url = reverse("organizations-import-gitlab-user-list")
+
+        r1 = client.post(url, format="json")
+        self.assertEqual(r1.status_code, 201)
+
+        mock_get.return_value = _response(
+            {
+                "id": 7,
+                "name": "Joao Novo",
+                "username": "joao",
+                "avatar_url": "https://new.png",
+                "bio": "Bio",
+            }
+        )
+        r2 = client.post(url, format="json")
+        self.assertEqual(r2.status_code, 201)
+
+        self.assertEqual(r1.json()["id"], r2.json()["id"])
+        self.assertEqual(Organization.objects.filter(gitlab_user_id=7).count(), 1)
+        org = Organization.objects.get(gitlab_user_id=7)
+        self.assertEqual(org.members.count(), 1)
+        self.assertEqual(org.name, "Joao Novo")
+        self.assertEqual(org.avatar_url, "https://new.png")
+
+    @patch("organizations.views.requests.get")
+    def test_group_org_with_same_name_does_not_conflict(self, mock_get):
+        # Cenário 1 (DOC#246): já existe org "joao" de grupo (gitlab_group_id=8) da qual o usuário é membro;
+        # import pessoal do usuário "joao" (id 7) cria org DIFERENTE com gitlab_user_id=7; a org do grupo não muda.
+        user, client = self._client("joao")
+        group_org = Organization.objects.create(name="joao", gitlab_group_id=8)
+        group_org.members.add(user)
+
+        mock_get.return_value = _response(
+            {"id": 7, "name": "joao", "username": "joao", "avatar_url": None, "bio": ""}
+        )
+        url = reverse("organizations-import-gitlab-user-list")
+        response = client.post(url, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        personal_org = Organization.objects.get(gitlab_user_id=7)
+        self.assertNotEqual(personal_org.id, group_org.id)
+        self.assertEqual(personal_org.name, "joao")
+        group_org.refresh_from_db()
+        self.assertEqual(group_org.gitlab_group_id, 8)
+        self.assertIsNone(group_org.gitlab_user_id)
+        self.assertIn(user, personal_org.members.all())
+        self.assertIn(user, group_org.members.all())
+
+    @patch("organizations.views.requests.get")
+    def test_other_user_org_with_same_name_does_not_conflict(self, mock_get):
+        # Cenário 2 (DOC#246): já existe org "joao" de outra pessoa (sem ids GitLab), da qual o usuário não é membro;
+        # import conclui com 201, cria org própria (gitlab_user_id=7) e o usuário NÃO vira membro da org alheia.
+        other_user = get_user_model().objects.create_user(username="other", password="pass")
+        other_org = Organization.objects.create(name="joao", admin=other_user)
+        other_org.members.add(other_user)
+
+        user, client = self._client("joao")
+        mock_get.return_value = _response(
+            {"id": 7, "name": "joao", "username": "joao", "avatar_url": None, "bio": ""}
+        )
+        url = reverse("organizations-import-gitlab-user-list")
+        response = client.post(url, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        personal_org = Organization.objects.get(gitlab_user_id=7)
+        self.assertNotEqual(personal_org.id, other_org.id)
+        self.assertEqual(personal_org.name, "joao")
+        other_org.refresh_from_db()
+        self.assertNotIn(user, other_org.members.all())
+        self.assertIn(user, personal_org.members.all())
+
+    @patch("organizations.views.requests.get")
+    def test_error_handling(self, mock_get):
+        # sem token -> 400
+        _, client_no_token = self._client("no_token", token=None)
+        url = reverse("organizations-import-gitlab-user-list")
+        r_no_token = client_no_token.post(url, format="json")
+        self.assertEqual(r_no_token.status_code, 400)
+        self.assertEqual(r_no_token.json(), {"error": "GitLab account not linked."})
+
+        # token inválido 401/403 -> 409 gitlab_token_invalid
+        _, client = self._client("logged")
+        mock_get.return_value = _response({"message": "401 Unauthorized"}, status_code=401)
+        r_401 = client.post(url, format="json")
+        self.assertEqual(r_401.status_code, 409)
+        self.assertEqual(r_401.json(), {"error": "gitlab_token_invalid"})
+
+        mock_get.return_value = _response({"message": "403 Forbidden"}, status_code=403)
+        r_403 = client.post(url, format="json")
+        self.assertEqual(r_403.status_code, 409)
+        self.assertEqual(r_403.json(), {"error": "gitlab_token_invalid"})
+
+        # GitLab indisponível -> 502 gitlab_unavailable
+        mock_get.side_effect = requests.exceptions.RequestException("Connection error")
+        r_502 = client.post(url, format="json")
+        self.assertEqual(r_502.status_code, 502)
+        self.assertEqual(r_502.json(), {"error": "gitlab_unavailable"})
+
+    @patch("organizations.views.requests.get")
+    def test_exposes_gitlab_user_id_read_only(self, mock_get):
+        mock_get.return_value = _response(
+            {"id": 7, "name": "Joao", "username": "joao", "avatar_url": None, "bio": ""}
+        )
+        _, client = self._client("reader")
+        client.post(reverse("organizations-import-gitlab-user-list"), format="json")
+        org = Organization.objects.get(gitlab_user_id=7)
+
+        detail = client.get(reverse("organization-detail", args=[org.id]))
+        self.assertEqual(detail.json()["gitlab_user_id"], 7)
+
+        created = client.post(
+            reverse("organization-list"), {"name": "Manual", "gitlab_user_id": 999}, format="json"
+        )
+        self.assertEqual(created.status_code, 201)
+        self.assertIsNone(Organization.objects.get(id=created.json()["id"]).gitlab_user_id)
