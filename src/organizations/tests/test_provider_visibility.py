@@ -257,7 +257,9 @@ class ImportGitLabGroupTestCase(APITestCaseExpanded):
         )
         self.assertEqual(r_before.status_code, 404)
 
-        r_import = second_client.post(reverse("organizations-import-gitlab-list"), {"gitlab_group_id": 77}, format="json")
+        r_import = second_client.post(
+            reverse("organizations-import-gitlab-list"), {"gitlab_group_id": 77}, format="json"
+        )
         self.assertEqual(r_import.status_code, 201)
         self.assertIn(second, org.members.all())
 
