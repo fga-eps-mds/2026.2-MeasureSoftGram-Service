@@ -12,6 +12,7 @@ from characteristics.serializers import (
 )
 from organizations.mixins import UserScopedMixin
 from organizations.models import Repository
+from organizations.quality_bands import build_bands, get_limits
 
 
 class SupportedCharacteristicModelViewSet(
@@ -129,4 +130,4 @@ class LatestCalculatedCharacteristicBadgeViewSet(
         if latest is None or is_stale(latest.created_at):
             return render_stale_badge_svg(label)
 
-        return render_badge_svg(label, latest.value)
+        return render_badge_svg(label, latest.value, build_bands(get_limits(repository.product)))
