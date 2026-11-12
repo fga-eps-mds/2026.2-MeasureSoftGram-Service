@@ -122,40 +122,48 @@ def calculate_norm_diff(planned_values, accomplished_characteristics):
         logger.warning("The number of planned and accomplished characteristics should be the same.")
         return None
 
-    else:
-        rp = []
-        rd = []
+    rp = [planned_characteristic["value"] for planned_characteristic in planned_values]
+    rd = _accomplished_vector(planned_values, accomplished_characteristics)
+    if rd is None:
+        return None
 
-        for planned_characteristic in planned_values:
-            planned_characteristic_name = planned_characteristic["name"]
+    # norm_diff divide pela norma do planejado: com a meta toda em 0, o resultado seria inf (ou nan), que não
+    # cabe no JSON e derrubava o analysis_data da release
+    if not np.any(rp):
+        logger.warning("The planned values are all zero: the normalized difference is undefined.")
+        return None
 
-            rp.append(planned_characteristic["value"])
-            accomplished_value = None
+    return norm_diff(np.array(rp), np.array(rd))
 
-            for accomplished_characteristic in accomplished_characteristics:
-                if accomplished_characteristic["name"] == planned_characteristic_name:
-                    accomplished_value = accomplished_characteristic["value"]
 
-            if accomplished_value is None:
-                logger.warning(
-                    "Planned characteristic %s was not found in the accomplished characteristics.",
-                    planned_characteristic_name,
-                )
-                return None
+def _accomplished_vector(planned_values, accomplished_characteristics):
+    """
+    Valores realizados na ordem das características planejadas, ou None (com aviso no log) se
+    alguma planejada não foi realizada ou tem valor fora de [0, 1].
+    """
+    # com nomes repetidos, vale o último, como na busca linear que existia antes
+    accomplished_by_name = {
+        characteristic["name"]: characteristic["value"] for characteristic in accomplished_characteristics
+    }
 
-            if accomplished_value < 0 or accomplished_value > 1:
-                logger.warning("Accomplished characteristic value should be between 0 and 1.")
-                return None
+    rd = []
+    for planned_characteristic in planned_values:
+        accomplished_value = accomplished_by_name.get(planned_characteristic["name"])
 
-            rd.append(accomplished_value)
-
-        # norm_diff divide pela norma do planejado: com a meta toda em 0, o resultado seria inf (ou nan), que não
-        # cabe no JSON e derrubava o analysis_data da release
-        if not np.any(rp):
-            logger.warning("The planned values are all zero: the normalized difference is undefined.")
+        if accomplished_value is None:
+            logger.warning(
+                "Planned characteristic %s was not found in the accomplished characteristics.",
+                planned_characteristic["name"],
+            )
             return None
 
-        return norm_diff(np.array(rp), np.array(rd))
+        if accomplished_value < 0 or accomplished_value > 1:
+            logger.warning("Accomplished characteristic value should be between 0 and 1.")
+            return None
+
+        rd.append(accomplished_value)
+
+    return rd
 
 
 def get_process_calculated_characteristics(

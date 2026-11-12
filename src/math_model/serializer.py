@@ -27,7 +27,6 @@ class MetricsSerializer(serializers.Serializer):
 
 
 class CalculateResponseSerializer(serializers.Serializer):
-    tsqmi = TSQMISerializer
     metrics = CollectedMetricSerializer(many=True)
     measures = CalculatedMeasureSerializer(many=True)
     subcharacteristics = CalculatedSubCharacteristicSerializer(many=True)
