@@ -112,8 +112,11 @@ class ProductsViewsSetCase(APITestCaseExpanded):
         product = self.get_product(org)
         url = reverse("product-detail", args=[org.id, product.id])
 
-        data = self.client.get(url).json()
+        response = self.client.get(url)
 
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["name"], product.name)
         self.assertNotIn("gaugeRedLimit", data)
         self.assertNotIn("gaugeYellowLimit", data)
 
