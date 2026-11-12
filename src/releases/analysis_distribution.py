@@ -119,38 +119,9 @@ def get_analysis_distribution(release, repository, configuration, level: str, ke
     gravadas com `qualifier = "TRK"` têm um valor por análise).
     """
     entities = get_configured_entities(configuration) if configuration else None
-
-    if level == TSQMI_LEVEL:
-        entity = TSQMI_ENTITY
-        children_level = CHARACTERISTIC
-        children = unique_by_key(entities[CHARACTERISTIC]) if entities else []
-    else:
-        if entities is None or not any(item["key"] == key for item in entities[level]):
-            raise EntityNotConfigured(key)
-        if level == METRIC and key not in get_repository_level_metric_keys(release, [key]):
-            raise MetricWithoutRepositoryValue(key)
-
-        entity = _get_supported_entities(level, [key])[key]
-        children_level = CHILD_LEVEL.get(level)
-        children = (
-            unique_by_key([item for item in entities[children_level] if item["parent"] == key])
-            if children_level
-            else []
-        )
+    entity, children_level, children = _resolve_entity_and_children(release, entities, level, key)
 
     entity_series = _get_series(level, repository, release, [entity["key"]]).get(entity["key"], [])
-
-    serialized_children = []
-    if children:
-        children_keys = [child["key"] for child in children]
-        children_series = _get_series(children_level, repository, release, children_keys)
-        supported_children = _get_supported_entities(children_level, children_keys)
-        # na ordem da configuração; filhos sem valor por análise ficam fora
-        serialized_children = [
-            _serialize_entity(children_level, supported_children[child_key], children_series[child_key])
-            for child_key in children_keys
-            if children_series.get(child_key) and child_key in supported_children
-        ]
 
     return {
         "release": {
@@ -168,8 +139,43 @@ def get_analysis_distribution(release, repository, configuration, level: str, ke
             "last": local_datetime(entity_series[-1][0]) if entity_series else None,
         },
         "entity": _serialize_entity(level, entity, entity_series),
-        "children": serialized_children,
+        "children": _serialize_children(children_level, children, repository, release),
     }
+
+
+def _resolve_entity_and_children(release, entities, level: str, key: str):
+    """Entidade pedida, o nível dos filhos e os filhos dela na configuração da release."""
+    if level == TSQMI_LEVEL:
+        children = unique_by_key(entities[CHARACTERISTIC]) if entities else []
+        return TSQMI_ENTITY, CHARACTERISTIC, children
+
+    if entities is None or not any(item["key"] == key for item in entities[level]):
+        raise EntityNotConfigured(key)
+    if level == METRIC and key not in get_repository_level_metric_keys(release, [key]):
+        raise MetricWithoutRepositoryValue(key)
+
+    entity = _get_supported_entities(level, [key])[key]
+    children_level = CHILD_LEVEL.get(level)
+    if not children_level:
+        return entity, None, []
+
+    children = unique_by_key([item for item in entities[children_level] if item["parent"] == key])
+    return entity, children_level, children
+
+
+def _serialize_children(children_level: str, children: list, repository, release) -> list:
+    """Filhos na ordem da configuração; os sem valor por análise ficam fora."""
+    if not children:
+        return []
+
+    children_keys = [child["key"] for child in children]
+    children_series = _get_series(children_level, repository, release, children_keys)
+    supported_children = _get_supported_entities(children_level, children_keys)
+    return [
+        _serialize_entity(children_level, supported_children[child_key], children_series[child_key])
+        for child_key in children_keys
+        if children_series.get(child_key) and child_key in supported_children
+    ]
 
 
 def _get_series(level: str, repository, release, keys: list) -> dict:

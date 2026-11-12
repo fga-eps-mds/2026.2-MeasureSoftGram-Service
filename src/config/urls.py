@@ -21,6 +21,7 @@ from organizations.routers.products import ProductRouter
 from organizations.routers.repos import RepoRouter
 from organizations.views import (
     ImportGitLabGroupViewSet,
+    ImportGitLabPersonalViewSet,
     ImportOrganizationViewSet,
     OrganizationViewSet,
     ProductQualityBandsViewSet,
@@ -56,6 +57,11 @@ main_router.register(
     "organizations/import-gitlab",
     ImportGitLabGroupViewSet,
     basename="organizations-import-gitlab",
+)
+main_router.register(
+    "organizations/import-gitlab-user",
+    ImportGitLabPersonalViewSet,
+    basename="organizations-import-gitlab-user",
 )
 main_router.register("organizations", OrganizationViewSet)
 

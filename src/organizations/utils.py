@@ -105,6 +105,7 @@ class ProviderResponseError(Exception):
 PROVIDER_PAGE_SIZE = 100
 PROVIDER_REPOS_CACHE_TTL = 300
 PROVIDER_PARALLEL_PAGES = 8
+JSON_CONTENT_TYPE = "application/json"
 
 
 def _provider_page(url, headers, params, page, timeout):
@@ -225,8 +226,16 @@ def _sync_repository_access(user, platform, repository_filter, provider_repos_fo
         ).delete()
 
 
+def _github_headers(user):
+    return {"Authorization": f"token {user.github_access_token}", "Accept": JSON_CONTENT_TYPE}
+
+
+def _gitlab_headers(user):
+    return {"Authorization": f"Bearer {user.gitlab_access_token}", "Accept": JSON_CONTENT_TYPE}
+
+
 def _sync_github(user, timeout):
-    headers = {"Authorization": f"token {user.github_access_token}", "Accept": "application/json"}
+    headers = _github_headers(user)
     profile = requests.get("https://api.github.com/user", headers=headers, timeout=timeout)
     orgs = _fetch_paginated("https://api.github.com/user/orgs", headers, {"per_page": 100}, timeout)
     if profile.status_code == 200 and orgs is not None:
@@ -239,7 +248,7 @@ def _sync_github(user, timeout):
 def _sync_github_repository_access(user, timeout):
     from django.db.models import Q
 
-    headers = {"Authorization": f"token {user.github_access_token}", "Accept": "application/json"}
+    headers = _github_headers(user)
     collaborator = _fetch_paginated(
         "https://api.github.com/user/repos",
         headers,
@@ -255,7 +264,7 @@ def _sync_github_repository_access(user, timeout):
 
 
 def _sync_gitlab(user, timeout):
-    headers = {"Authorization": f"Bearer {user.gitlab_access_token}", "Accept": "application/json"}
+    headers = _gitlab_headers(user)
     base = "https://gitlab.com/api/v4"
     groups = _fetch_paginated(f"{base}/groups", headers, {"min_access_level": 10, "per_page": 100}, timeout)
     if groups is not None:
@@ -267,7 +276,7 @@ def _sync_gitlab(user, timeout):
 def _sync_gitlab_repository_access(user, timeout):
     from django.db.models import Q
 
-    headers = {"Authorization": f"Bearer {user.gitlab_access_token}", "Accept": "application/json"}
+    headers = _gitlab_headers(user)
     projects = _fetch_paginated(
         "https://gitlab.com/api/v4/projects",
         headers,
