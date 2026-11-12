@@ -347,6 +347,56 @@ class ImportGitLabGroupViewSet(viewsets.ViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+class ImportGitLabPersonalViewSet(viewsets.ViewSet):
+    """Importa o namespace pessoal do GitLab como Organization própria (uma por `gitlab_user_id`)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def create(self, request):
+        user = request.user
+        token = user.gitlab_access_token
+        if not token:
+            return Response({"error": "GitLab account not linked."}, status=status.HTTP_400_BAD_REQUEST)
+
+        headers = {"Authorization": f"Bearer {token}", "Accept": JSON_CONTENT_TYPE}
+        timeout = getattr(settings, "GITLAB_TIMEOUT", 10)
+        try:
+            r = requests.get("https://gitlab.com/api/v4/user", headers=headers, timeout=timeout)
+        except requests.exceptions.RequestException:
+            return Response({"error": "gitlab_unavailable"}, status=status.HTTP_502_BAD_GATEWAY)
+
+        if r.status_code in (401, 403):
+            return Response({"error": "gitlab_token_invalid"}, status=status.HTTP_409_CONFLICT)
+        if r.status_code != 200:
+            return Response({"error": "Failed to fetch user from GitLab"}, status=r.status_code)
+
+        user_data = r.json()
+        gitlab_user_id = user_data.get("id")
+        name = user_data.get("name") or user_data.get("username") or str(gitlab_user_id)
+        avatar_url = user_data.get("avatar_url")
+        description = user_data.get("bio") or ""
+        org, created = Organization.objects.get_or_create(
+            gitlab_user_id=gitlab_user_id,
+            defaults={
+                "name": name,
+                "avatar_url": avatar_url,
+                "description": description,
+            },
+        )
+        if not created:
+            org.name = name
+            org.avatar_url = avatar_url
+            org.save()
+
+        org.members.add(user)
+        if not org.admin:
+            org.admin = user
+            org.save()
+
+        serializer = OrganizationSerializer(org, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
 class GitHubReposViewSet(UserScopedMixin, viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 

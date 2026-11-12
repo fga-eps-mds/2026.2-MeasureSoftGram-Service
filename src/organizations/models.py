@@ -34,6 +34,7 @@ class Organization(models.Model):
     github_org_id = models.BigIntegerField(unique=True, null=True, blank=True)
     github_org_name = models.CharField(max_length=255, null=True, blank=True)
     gitlab_group_id = models.BigIntegerField(unique=True, null=True, blank=True)
+    gitlab_user_id = models.BigIntegerField(unique=True, null=True, blank=True)
     avatar_url = models.URLField(null=True, blank=True)
 
     def save(self, *args, **kwargs):

@@ -41,6 +41,7 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
             "actions",
             "github_org_name",
             "gitlab_group_id",
+            "gitlab_user_id",
             "avatar_url",
         )
         extra_kwargs = {
@@ -53,6 +54,7 @@ class OrganizationSerializer(serializers.HyperlinkedModelSerializer):
                 ]
             },
             "gitlab_group_id": {"read_only": True},
+            "gitlab_user_id": {"read_only": True},
         }
 
     def get_products(self, obj: Organization):
