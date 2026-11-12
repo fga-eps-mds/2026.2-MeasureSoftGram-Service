@@ -1,4 +1,3 @@
-from decimal import Decimal
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
@@ -65,8 +64,6 @@ class Product(models.Model):
         on_delete=models.CASCADE,
         related_name="products",
     )
-    gaugeRedLimit = models.DecimalField(max_digits=3, decimal_places=2, default=Decimal("0.33"))
-    gaugeYellowLimit = models.DecimalField(max_digits=3, decimal_places=2, default=Decimal("0.66"))
     # os 4 cortes entre as faixas de qualidade E a A (US30.01); None segue os padrões de `quality_bands`
     quality_band_limits = models.JSONField(null=True, blank=True, default=None)
 
