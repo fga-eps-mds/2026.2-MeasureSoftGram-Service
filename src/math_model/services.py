@@ -81,39 +81,33 @@ class MathModelServices:
         collected_at = timezone.now()
         self.collected_at = collected_at
 
-        collected: List[CollectedMetric] = []
+        github_metrics = data["github"]["metrics"] if data.get("github") else []
+        sonar_components = data["sonarqube"]["components"] if data.get("sonarqube") else []
 
-        if data.get("github"):
-            for metric in data["github"]["metrics"]:
-                key = metric["name"]
-                if key not in supported_metrics:
-                    continue
-                collected.append(
-                    CollectedMetric(
-                        metric=supported_metrics[key],
-                        value=float(metric["value"]),
-                        repository=self.repository,
-                        qualifier="TRK",
-                        created_at=collected_at,
-                    )
-                )
-
-        if data.get("sonarqube"):
-            for component in data["sonarqube"]["components"]:
-                for obj in component["measures"]:
-                    key = obj["metric"]
-                    if key not in supported_metrics:
-                        continue
-                    collected.append(
-                        CollectedMetric(
-                            qualifier=component["qualifier"],
-                            path=component["path"],
-                            metric=supported_metrics[key],
-                            value=float(obj["value"]),
-                            repository=self.repository,
-                            created_at=collected_at,
-                        )
-                    )
+        collected: List[CollectedMetric] = [
+            CollectedMetric(
+                metric=supported_metrics[metric["name"]],
+                value=float(metric["value"]),
+                repository=self.repository,
+                qualifier="TRK",
+                created_at=collected_at,
+            )
+            for metric in github_metrics
+            if metric["name"] in supported_metrics
+        ]
+        collected.extend(
+            CollectedMetric(
+                qualifier=component["qualifier"],
+                path=component["path"],
+                metric=supported_metrics[obj["metric"]],
+                value=float(obj["value"]),
+                repository=self.repository,
+                created_at=collected_at,
+            )
+            for component in sonar_components
+            for obj in component["measures"]
+            if obj["metric"] in supported_metrics
+        )
 
         return collected
 

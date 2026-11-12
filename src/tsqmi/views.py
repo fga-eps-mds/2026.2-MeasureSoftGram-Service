@@ -5,6 +5,7 @@ from rest_framework.response import Response
 
 from organizations.mixins import UserScopedMixin
 from organizations.models import Repository
+from organizations.quality_bands import build_bands, get_limits
 from tsqmi.serializers import TSQMISerializer
 from utils.badge import is_stale, render_badge_svg, render_stale_badge_svg
 
@@ -50,7 +51,7 @@ class LatestCalculatedTSQMIBadgeViewSet(
         if latest_tsqmi is None or is_stale(latest_tsqmi.created_at):
             return render_stale_badge_svg("MeasureSoftGram")
 
-        return render_badge_svg("MeasureSoftGram", latest_tsqmi.value)
+        return render_badge_svg("MeasureSoftGram", latest_tsqmi.value, build_bands(get_limits(repository.product)))
 
 
 class CalculatedTSQMIHistoryModelViewSet(
