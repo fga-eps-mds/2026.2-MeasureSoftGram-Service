@@ -60,7 +60,7 @@ def create_balance_matrix(
     BalanceMatrix.objects.bulk_create(to_create, ignore_conflicts=True)
 
 
-def force_the_sum_to_equal_100(entities_data: dict):
+def force_the_sum_to_equal_100(entities_data: list[dict]):
     weight_sum = sum(entity["weight"] for entity in entities_data)
 
     if weight_sum != 100:
