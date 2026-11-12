@@ -32,8 +32,6 @@ class ProductsViewsSetCase(APITestCaseExpanded):
         data = {
             "name": "Test Product",
             "description": "Test Product Description",
-            "gaugeRedLimit": "0.2",
-            "gaugeYellowLimit": "0.8",
         }
         response = self.client.post(url, data, format="json")
         self.assertEqual(response.status_code, 201)
@@ -100,8 +98,6 @@ class ProductsViewsSetCase(APITestCaseExpanded):
         data = {
             "name": "Test Product Updated",
             "description": "Test Product Description Updated",
-            "gaugeRedLimit": "0.2",
-            "gaugeYellowLimit": "0.8",
         }
         response = self.client.put(url, data, format="json")
         self.assertEqual(response.status_code, 200)
@@ -109,6 +105,17 @@ class ProductsViewsSetCase(APITestCaseExpanded):
 
         product = Product.objects.get(id=product.id)
         self.compare_product_data(data, product)
+
+    def test_product_does_not_expose_the_legacy_gauge_limits(self):
+        # o velocímetro usa as faixas de qualidade do produto (US30.03); os limites de 2024.1 saíram da API
+        org = self.get_organization()
+        product = self.get_product(org)
+        url = reverse("product-detail", args=[org.id, product.id])
+
+        data = self.client.get(url).json()
+
+        self.assertNotIn("gaugeRedLimit", data)
+        self.assertNotIn("gaugeYellowLimit", data)
 
     def test_patch_update_a_existing_product(self):
         org = self.get_organization()
@@ -349,8 +356,6 @@ class ProductsViewsSetCase(APITestCaseExpanded):
         data = {
             "name": "Test Product",
             "description": "Test Product Description",
-            "gaugeRedLimit": "0.2",
-            "gaugeYellowLimit": "0.8",
         }
         response = self.client.post(url, data, format="json")
         self.assertEqual(response.status_code, 201)
