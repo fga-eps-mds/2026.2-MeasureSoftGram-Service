@@ -76,6 +76,27 @@ GITHUB_METRICS = ("total_issues", "resolved_issues", "sum_ci_feedback_times", "t
 # Semente fixa: as métricas do GitHub saem iguais a cada execução do seed
 GITHUB_METRICS_SEED = 2103
 
+# Métricas por arquivo do seed: as 8 primeiras métricas, nos últimos 30 dias, em 8 dos 15 arquivos.
+SEED_FILE_METRICS = 8
+SEED_FILE_DAYS = 30
+FILE_PATHS = [
+    f"src/{module}/{fname}"
+    for module in ["api", "models", "services", "utils", "tests"]
+    for fname in ["main.py", "helper.py", "core.py"]
+]
+
+
+def _collected_file_metric(repo: Repository, metric: SupportedMetric, path: str, ts) -> CollectedMetric:
+    """Métrica de um arquivo numa data, com valor aleatório na escala da métrica (0 a 1 para percentuais)."""
+    return CollectedMetric(
+        metric=metric,
+        value=random.uniform(0, 1) if metric.metric_type == "PERCENT" else random.uniform(0, 100),
+        path=path,
+        qualifier="FIL" if "test" not in path else "UTS",
+        created_at=ts,
+        repository=repo,
+    )
+
 
 def _clamp(v, lo=0.0, hi=1.0):
     return max(lo, min(hi, v))
@@ -206,37 +227,18 @@ class Command(BaseCommand):
         Cria métricas coletadas por arquivo, um conjunto por dia.
         Gera ~10 arquivos por dia para ter distribuição estatística.
         """
-        metrics = list(SupportedMetric.objects.all())
+        metrics = list(SupportedMetric.objects.all())[:SEED_FILE_METRICS]  # métricas principais
         if not metrics:
             return
 
         # Limita a geração de métricas de arquivo para não explodir o banco
-        DAYS_TO_SEED = min(len(timestamps), 30)
-        sampled_timestamps = timestamps[-DAYS_TO_SEED:]
-
-        FILE_PATHS = [
-            f"src/{module}/{fname}"
-            for module in ["api", "models", "services", "utils", "tests"]
-            for fname in ["main.py", "helper.py", "core.py"]
-        ]
+        sampled_timestamps = timestamps[-min(len(timestamps), SEED_FILE_DAYS) :]
 
         to_create = []
         for ts in sampled_timestamps:
-            for metric in metrics[:8]:  # métricas principais
+            for metric in metrics:
                 for path in random.sample(FILE_PATHS, k=min(8, len(FILE_PATHS))):
-                    qualifier = "FIL" if "test" not in path else "UTS"
-                    to_create.append(
-                        CollectedMetric(
-                            metric=metric,
-                            value=(
-                                random.uniform(0, 1) if metric.metric_type == "PERCENT" else random.uniform(0, 100)
-                            ),
-                            path=path,
-                            qualifier=qualifier,
-                            created_at=ts,
-                            repository=repo,
-                        )
-                    )
+                    to_create.append(_collected_file_metric(repo, metric, path, ts))
 
         if to_create:
             CollectedMetric.objects.bulk_create(to_create, batch_size=500, ignore_conflicts=False)
@@ -432,7 +434,7 @@ class Command(BaseCommand):
     def _seed_goals_and_releases(self):
         self.stdout.write("Criando Goals e Releases...")
 
-        products = Product.objects.all()
+        products = Product.objects.prefetch_related("release_configuration")
         chars = list(SupportedCharacteristic.objects.values_list("key", flat=True))
 
         for product in products:
