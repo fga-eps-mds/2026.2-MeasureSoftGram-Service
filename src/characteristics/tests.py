@@ -109,35 +109,44 @@ class LatestCalculatedCharacteristicBadgeViewSetTest(APITestCaseExpanded):
         response = self.client.get(self._get_badge_url())
         content = response.content.decode()
         self.assertIn(">A<", content)
-        self.assertIn("#4c1", content)
+        self.assertIn("#04724D", content)
 
     def test_badge_grade_b(self):
         self._create_calculated_characteristic(0.70)
         response = self.client.get(self._get_badge_url())
         content = response.content.decode()
         self.assertIn(">B<", content)
-        self.assertIn("#97CA00", content)
+        self.assertIn("#0DC889", content)
 
     def test_badge_grade_c(self):
         self._create_calculated_characteristic(0.50)
         response = self.client.get(self._get_badge_url())
         content = response.content.decode()
         self.assertIn(">C<", content)
-        self.assertIn("#dfb317", content)
+        self.assertIn("#EBA133", content)
 
     def test_badge_grade_d(self):
         self._create_calculated_characteristic(0.30)
         response = self.client.get(self._get_badge_url())
         content = response.content.decode()
         self.assertIn(">D<", content)
-        self.assertIn("#fe7d37", content)
+        self.assertIn("#F16141", content)
 
     def test_badge_grade_e(self):
         self._create_calculated_characteristic(0.10)
         response = self.client.get(self._get_badge_url())
         content = response.content.decode()
         self.assertIn(">E<", content)
-        self.assertIn("#e05d44", content)
+        self.assertIn("#BE2E0E", content)
+
+    def test_badge_custom_product_bands_082_is_grade_b(self):
+        self.product.quality_band_limits = ["0.20", "0.40", "0.60", "0.85"]
+        self.product.save()
+        self._create_calculated_characteristic(0.82)
+        response = self.client.get(self._get_badge_url())
+        content = response.content.decode()
+        self.assertIn(">B<", content)
+        self.assertIn("#0DC889", content)
 
     def test_badge_no_calculated_characteristic_returns_na(self):
         response = self.client.get(self._get_badge_url())

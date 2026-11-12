@@ -5,13 +5,7 @@ from django.conf import settings
 from django.http import HttpResponse
 from django.utils import timezone
 
-GRADE_MAP = [
-    (0.80, "A", "#4c1"),
-    (0.60, "B", "#97CA00"),
-    (0.40, "C", "#dfb317"),
-    (0.20, "D", "#fe7d37"),
-    (0.00, "E", "#e05d44"),
-]
+from organizations.quality_bands import BAND_COLORS, get_band
 
 BADGE_SVG_TEMPLATE = (
     '<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="20">'
@@ -45,12 +39,10 @@ BADGE_STALE_SVG_TEMPLATE = (
 )
 
 
-def get_grade(value):
+def get_grade(value, bands):
     """Return (grade_letter, color_hex) for a given 0-1 value."""
-    for threshold, grade, color in GRADE_MAP:
-        if value >= threshold:
-            return grade, color
-    return "E", "#e05d44"
+    key = get_band(value, bands)["key"]
+    return key, BAND_COLORS[key]
 
 
 def is_stale(created_at):
@@ -61,10 +53,10 @@ def is_stale(created_at):
     return timezone.now() - created_at > timedelta(days=max_age_days)
 
 
-def render_badge_svg(label, value):
+def render_badge_svg(label, value, bands):
     """Render a badge SVG for the given label and 0-1 value."""
     label = escape(label)
-    grade, color = get_grade(value)
+    grade, color = get_grade(value, bands)
     # Approximate width: 7px per char for label + 30px for grade box
     label_width = max(len(label) * 7 + 10, 60)
     width = label_width + 30

@@ -3,12 +3,20 @@ Faixas de qualidade do produto (US30.01): a régua de 0 a 1 que pinta os gráfic
 
 São 5 faixas, da pior para a melhor (E a A), separadas por 4 cortes. O produto guarda só os
 cortes em `Product.quality_band_limits`; `None` quer dizer que ele nunca alterou a régua e usa
-os padrões daqui. O `GRADE_MAP` de `utils/badge.py` ainda repete esses cortes até a US30.03.
+os padrões daqui. O badge usa estas faixas e as cores ficam em `BAND_COLORS`.
 """
 
 from decimal import Decimal
 
 BAND_KEYS = ("E", "D", "C", "B", "A")
+
+BAND_COLORS = {
+    "E": "#BE2E0E",
+    "D": "#F16141",
+    "C": "#EBA133",
+    "B": "#0DC889",
+    "A": "#04724D",
+}
 
 DEFAULT_LIMITS = (Decimal("0.20"), Decimal("0.40"), Decimal("0.60"), Decimal("0.80"))
 
@@ -27,6 +35,15 @@ def build_bands(limits) -> list:
     """As 5 faixas de E a A: a primeira começa em 0, a última termina em 1 e o fim de uma é o início da seguinte."""
     edges = (LOWEST, *limits, HIGHEST)
     return [{"key": key, "min": edges[index], "max": edges[index + 1]} for index, key in enumerate(BAND_KEYS)]
+
+
+def get_band(value, bands: list) -> dict:
+    """Faixa do valor no intervalo [min, max); valores >= 1 ficam na última (A) e < 0 na primeira (E)."""
+    decimal_value = Decimal(str(value))
+    for band in bands:
+        if decimal_value < band["max"]:
+            return band
+    return bands[-1]
 
 
 def serialize(product, can_edit: bool) -> dict:
