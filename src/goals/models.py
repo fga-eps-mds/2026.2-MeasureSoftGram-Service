@@ -5,6 +5,9 @@ from django.db import models
 from django.utils import timezone
 
 
+GOAL_UPDATE_NOT_ALLOWED = "It's not allowed to update a goal"
+
+
 class ImmutableQuerySet(models.QuerySet):
     """
     QuerySet que garante a imutabilidade de Goal mesmo pelos vetores que
@@ -18,10 +21,10 @@ class ImmutableQuerySet(models.QuerySet):
     """
 
     def update(self, *args, **kwargs):
-        raise ValueError("It's not allowed to update a goal")
+        raise ValueError(GOAL_UPDATE_NOT_ALLOWED)
 
     def bulk_update(self, *args, **kwargs):
-        raise ValueError("It's not allowed to update a goal")
+        raise ValueError(GOAL_UPDATE_NOT_ALLOWED)
 
 
 class Goal(models.Model):
@@ -60,7 +63,7 @@ class Goal(models.Model):
 
     def save(self, *args, **kwargs):
         if self.id:
-            raise ValueError("It's not allowed to update a goal")
+            raise ValueError(GOAL_UPDATE_NOT_ALLOWED)
 
         if not self.validate_goal(self.data):
             raise ValidationError("The goal data is invalid")

@@ -9,6 +9,9 @@ from subcharacteristics.models import SupportedSubCharacteristic
 from utils.exceptions import InvalidReleaseConfigurationException
 
 
+RELEASE_CONFIGURATION_EDIT_NOT_ALLOWED = "It's not allowed to edit a release-configuration"
+
+
 class ImmutableQuerySet(models.QuerySet):
     """
     QuerySet que garante a imutabilidade de ReleaseConfiguration mesmo pelos
@@ -22,10 +25,10 @@ class ImmutableQuerySet(models.QuerySet):
     """
 
     def update(self, *args, **kwargs):
-        raise ValueError("It's not allowed to edit a release-configuration")
+        raise ValueError(RELEASE_CONFIGURATION_EDIT_NOT_ALLOWED)
 
     def bulk_update(self, *args, **kwargs):
-        raise ValueError("It's not allowed to edit a release-configuration")
+        raise ValueError(RELEASE_CONFIGURATION_EDIT_NOT_ALLOWED)
 
 
 class ReleaseConfiguration(models.Model):
@@ -64,7 +67,7 @@ class ReleaseConfiguration(models.Model):
         está sendo criada ou editada é ou não válida
         """
         if self.id:
-            raise ValueError("It's not allowed to edit a release-configuration")
+            raise ValueError(RELEASE_CONFIGURATION_EDIT_NOT_ALLOWED)
 
         self.validate_measures(self.data)
         self.validate_measures_weights(self.data)
