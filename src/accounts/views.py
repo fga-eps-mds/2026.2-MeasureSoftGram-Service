@@ -156,7 +156,7 @@ class UserRepos(viewsets.ReadOnlyModelViewSet):
             )
 
         headersUser = {"Authorization": f'Bearer {token_data["access_token"]}'}
-        urlRepos = "https://api.github.com/user/repos?per_page=100"
+        urlRepos = f"{settings.GITHUB_API_URL}/user/repos?per_page=100"
         responseRepos = requests.get(urlRepos, headers=headersUser)
         repos_data = responseRepos.json()
         formatted_response = {
@@ -245,7 +245,7 @@ class GitHubOrganizationsViewSet(viewsets.ViewSet):
         timeout = getattr(settings, "GITHUB_TIMEOUT", 10)
         results = []
 
-        user_data, user_err = self._fetch_github("https://api.github.com/user", headers, timeout)
+        user_data, user_err = self._fetch_github(f"{settings.GITHUB_API_URL}/user", headers, timeout)
         if user_err:
             return user_err
 
@@ -259,7 +259,7 @@ class GitHubOrganizationsViewSet(viewsets.ViewSet):
         )
 
         orgs_data, orgs_err = self._fetch_github(
-            "https://api.github.com/user/orgs?per_page=100", headers, timeout, follow_next=True
+            f"{settings.GITHUB_API_URL}/user/orgs?per_page=100", headers, timeout, follow_next=True
         )
         if orgs_err and (orgs_err.status_code == status.HTTP_409_CONFLICT or not results):
             return orgs_err
@@ -314,7 +314,7 @@ class GitLabNamespacesViewSet(viewsets.ViewSet):
             with ThreadPoolExecutor(max_workers=2) as executor:
                 future_user = executor.submit(
                     requests.get,
-                    "https://gitlab.com/api/v4/user",
+                    f"{settings.GITLAB_BASE_URL}/api/v4/user",
                     headers=headers,
                     timeout=timeout,
                 )
@@ -337,7 +337,7 @@ class GitLabNamespacesViewSet(viewsets.ViewSet):
     @staticmethod
     def _fetch_all_groups(headers, timeout):
         """Segue o X-Next-Page de /groups até o fim; a resposta devolvida leva todos os itens em `all_groups`."""
-        base_url = "https://gitlab.com/api/v4/groups?min_access_level=10&per_page=100"
+        base_url = f"{settings.GITLAB_BASE_URL}/api/v4/groups?min_access_level=10&per_page=100"
         response = requests.get(base_url, headers=headers, timeout=timeout)
         groups = []
         current = response
@@ -450,7 +450,7 @@ class GithubValidateView(APIView):
             )
 
         try:
-            url = f"https://api.github.com/applications/{backend_client_id}/token"
+            url = f"{settings.GITHUB_API_URL}/applications/{backend_client_id}/token"
             response = requests.post(
                 url,
                 json={"access_token": "dummy_verification_token"},
@@ -506,7 +506,7 @@ class GitlabValidateView(APIView):
             )
 
         try:
-            url = "https://gitlab.com/oauth/token"
+            url = f"{settings.GITLAB_BASE_URL}/oauth/token"
             response = requests.post(
                 url,
                 data={

@@ -239,7 +239,9 @@ class ImportOrganizationViewSet(viewsets.ViewSet):
             "Accept": JSON_CONTENT_TYPE,
         }
 
-        url_fetch = "https://api.github.com/user" if is_personal else f"https://api.github.com/orgs/{github_org_name}"
+        url_fetch = (
+            f"{settings.GITHUB_API_URL}/user" if is_personal else f"{settings.GITHUB_API_URL}/orgs/{github_org_name}"
+        )
         org_data, fetch_err = self._fetch_github_metadata(url_fetch, headers)
         if fetch_err:
             return fetch_err
@@ -248,7 +250,7 @@ class ImportOrganizationViewSet(viewsets.ViewSet):
 
         if not is_personal:
             r_member = requests.get(
-                f"https://api.github.com/user/memberships/orgs/{github_org_name}",
+                f"{settings.GITHUB_API_URL}/user/memberships/orgs/{github_org_name}",
                 headers=headers,
             )
             if r_member.status_code != 200:
@@ -310,7 +312,7 @@ class ImportGitLabGroupViewSet(viewsets.ViewSet):
         headers = {"Authorization": f"Bearer {token}", "Accept": JSON_CONTENT_TYPE}
         timeout = getattr(settings, "GITLAB_TIMEOUT", 10)
         try:
-            r = requests.get(f"https://gitlab.com/api/v4/groups/{group_id}", headers=headers, timeout=timeout)
+            r = requests.get(f"{settings.GITLAB_BASE_URL}/api/v4/groups/{group_id}", headers=headers, timeout=timeout)
         except requests.exceptions.RequestException:
             return Response({"error": "gitlab_unavailable"}, status=status.HTTP_502_BAD_GATEWAY)
 
@@ -361,7 +363,7 @@ class ImportGitLabPersonalViewSet(viewsets.ViewSet):
         headers = {"Authorization": f"Bearer {token}", "Accept": JSON_CONTENT_TYPE}
         timeout = getattr(settings, "GITLAB_TIMEOUT", 10)
         try:
-            r = requests.get("https://gitlab.com/api/v4/user", headers=headers, timeout=timeout)
+            r = requests.get(f"{settings.GITLAB_BASE_URL}/api/v4/user", headers=headers, timeout=timeout)
         except requests.exceptions.RequestException:
             return Response({"error": "gitlab_unavailable"}, status=status.HTTP_502_BAD_GATEWAY)
 
@@ -438,10 +440,10 @@ class GitHubReposViewSet(UserScopedMixin, viewsets.ViewSet):
         search = (request.query_params.get("search") or "").strip()
 
         if is_personal:
-            url_fetch = "https://api.github.com/user/repos"
+            url_fetch = f"{settings.GITHUB_API_URL}/user/repos"
             params = {"affiliation": "owner,collaborator", "sort": "full_name"}
         else:
-            url_fetch = f"https://api.github.com/orgs/{github_org_name}/repos"
+            url_fetch = f"{settings.GITHUB_API_URL}/orgs/{github_org_name}/repos"
             params = {"type": "all", "sort": "full_name"}
 
         exclude_product = get_exclude_product(request, org)
@@ -565,10 +567,10 @@ class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
         params = {}
         if kind == "user":
             # membership=true inclui projetos em que a pessoa foi convidada, mesmo de grupos dos quais não é membro.
-            url = "https://gitlab.com/api/v4/projects"
+            url = f"{settings.GITLAB_BASE_URL}/api/v4/projects"
             params.update({"membership": "true", "simple": "true", "order_by": "path"})
         else:
-            url = f"https://gitlab.com/api/v4/groups/{namespace_id}/projects"
+            url = f"{settings.GITLAB_BASE_URL}/api/v4/groups/{namespace_id}/projects"
         if search:
             params["search"] = search
 

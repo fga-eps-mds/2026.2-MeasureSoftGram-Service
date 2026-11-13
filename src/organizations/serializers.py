@@ -192,9 +192,7 @@ class ProductSerializer(serializers.ModelSerializer):
             obj, "release-config-entity-relationship-tree-list"
         )
 
-        quality_model_tree_url = self.reverse_product_resource(
-            obj, "product-quality-model-tree-list"
-        )
+        quality_model_tree_url = self.reverse_product_resource(obj, "product-quality-model-tree-list")
 
         repositories_latest_tsqmis_url = self.reverse_product_resource(
             obj,
@@ -294,7 +292,7 @@ class RepositorySerializer(serializers.HyperlinkedModelSerializer):
             return check_url, headers
 
         owner, repo = parts[0], parts[1]
-        check_url = f"https://api.github.com/repos/{owner}/{repo}"
+        check_url = f"{settings.GITHUB_API_URL}/repos/{owner}/{repo}"
         headers["Accept"] = "application/vnd.github.v3+json"
 
         request = self.context.get("request")

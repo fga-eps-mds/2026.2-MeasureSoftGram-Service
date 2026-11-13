@@ -229,6 +229,9 @@ GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID", "")
 GITHUB_SECRET = os.getenv("GITHUB_SECRET", "")
 GITLAB_CLIENT_ID = os.getenv("GITLAB_CLIENT_ID", "")
 GITLAB_SECRET = os.getenv("GITLAB_SECRET", "")
+# Bases das APIs dos provedores; o E2E de sistema aponta as duas para um servidor falso.
+GITLAB_BASE_URL = os.getenv("GITLAB_BASE_URL", "https://gitlab.com").rstrip("/")
+GITHUB_API_URL = os.getenv("GITHUB_API_URL", "https://api.github.com").rstrip("/")
 
 # First key encrypts new values; remaining keys allow reading during rotation.
 GITHUB_TOKEN_ENCRYPTION_KEYS = [
@@ -253,6 +256,7 @@ SOCIALACCOUNT_PROVIDERS = {
         ],
     },
     "gitlab": {
+        "GITLAB_URL": GITLAB_BASE_URL,
         "APP": {
             "client_id": os.getenv("GITLAB_CLIENT_ID", ""),
             "secret": os.getenv("GITLAB_SECRET", ""),

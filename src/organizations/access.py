@@ -59,10 +59,10 @@ def provider_grants_access(user, repository):
         return False
 
     if platform == "github" and repository.github_full_name:
-        url = f"https://api.github.com/repos/{repository.github_full_name}"
+        url = f"{settings.GITHUB_API_URL}/repos/{repository.github_full_name}"
         headers = {"Authorization": f"token {token}", "Accept": "application/json"}
     elif platform == "gitlab" and repository.gitlab_project_id:
-        url = f"https://gitlab.com/api/v4/projects/{repository.gitlab_project_id}"
+        url = f"{settings.GITLAB_BASE_URL}/api/v4/projects/{repository.gitlab_project_id}"
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
     else:
         return False

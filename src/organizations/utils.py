@@ -3,12 +3,13 @@ import logging
 from urllib.parse import parse_qs, urlparse
 
 import requests
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
 
 def _trigger_github_workflow(repo_full_name, headers):
-    url_workflows = f"https://api.github.com/repos/{repo_full_name}/actions/workflows"
+    url_workflows = f"{settings.GITHUB_API_URL}/repos/{repo_full_name}/actions/workflows"
     try:
         r = requests.get(url_workflows, headers=headers, timeout=10)
         if r.status_code != 200:
@@ -31,7 +32,7 @@ def _trigger_github_workflow(repo_full_name, headers):
         wf_id = selected_workflow["id"]
 
         r_repo = requests.get(
-            f"https://api.github.com/repos/{repo_full_name}",
+            f"{settings.GITHUB_API_URL}/repos/{repo_full_name}",
             headers=headers,
             timeout=10,
         )
@@ -39,7 +40,7 @@ def _trigger_github_workflow(repo_full_name, headers):
         if r_repo.status_code == 200:
             default_branch = r_repo.json().get("default_branch", "main")
 
-        url_trigger = f"https://api.github.com/repos/{repo_full_name}/actions/workflows/{wf_id}/dispatches"
+        url_trigger = f"{settings.GITHUB_API_URL}/repos/{repo_full_name}/actions/workflows/{wf_id}/dispatches"
         r_dispatch = requests.post(
             url_trigger,
             headers=headers,
@@ -109,8 +110,9 @@ JSON_CONTENT_TYPE = "application/json"
 
 
 def _provider_page(url, headers, params, page, timeout):
-    response = requests.get(url, headers=headers, params={**params, "per_page": PROVIDER_PAGE_SIZE, "page": page},
-                            timeout=timeout)
+    response = requests.get(
+        url, headers=headers, params={**params, "per_page": PROVIDER_PAGE_SIZE, "page": page}, timeout=timeout
+    )
     if response.status_code != 200:
         details = {}
         try:
@@ -236,8 +238,8 @@ def _gitlab_headers(user):
 
 def _sync_github(user, timeout):
     headers = _github_headers(user)
-    profile = requests.get("https://api.github.com/user", headers=headers, timeout=timeout)
-    orgs = _fetch_paginated("https://api.github.com/user/orgs", headers, {"per_page": 100}, timeout)
+    profile = requests.get(f"{settings.GITHUB_API_URL}/user", headers=headers, timeout=timeout)
+    orgs = _fetch_paginated(f"{settings.GITHUB_API_URL}/user/orgs", headers, {"per_page": 100}, timeout)
     if profile.status_code == 200 and orgs is not None:
         ids = [profile.json().get("id")] + [org.get("id") for org in orgs]
         _sync_organization_membership(user, "github_org_id", [i for i in ids if i])
@@ -250,7 +252,7 @@ def _sync_github_repository_access(user, timeout):
 
     headers = _github_headers(user)
     collaborator = _fetch_paginated(
-        "https://api.github.com/user/repos",
+        f"{settings.GITHUB_API_URL}/user/repos",
         headers,
         {"affiliation": "collaborator", "per_page": 100},
         timeout,
@@ -258,14 +260,12 @@ def _sync_github_repository_access(user, timeout):
     if collaborator is not None:
         ids = [repo.get("id") for repo in collaborator if repo.get("id")]
         names = [repo.get("full_name") for repo in collaborator if repo.get("full_name")]
-        _sync_repository_access(
-            user, "github", Q(github_repo_id__in=ids) | Q(github_full_name__in=names), True
-        )
+        _sync_repository_access(user, "github", Q(github_repo_id__in=ids) | Q(github_full_name__in=names), True)
 
 
 def _sync_gitlab(user, timeout):
     headers = _gitlab_headers(user)
-    base = "https://gitlab.com/api/v4"
+    base = f"{settings.GITLAB_BASE_URL}/api/v4"
     groups = _fetch_paginated(f"{base}/groups", headers, {"min_access_level": 10, "per_page": 100}, timeout)
     if groups is not None:
         _sync_organization_membership(user, "gitlab_group_id", [group.get("id") for group in groups])
@@ -278,7 +278,7 @@ def _sync_gitlab_repository_access(user, timeout):
 
     headers = _gitlab_headers(user)
     projects = _fetch_paginated(
-        "https://gitlab.com/api/v4/projects",
+        f"{settings.GITLAB_BASE_URL}/api/v4/projects",
         headers,
         {"membership": "true", "simple": "true", "per_page": 100},
         timeout,
