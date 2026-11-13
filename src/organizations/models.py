@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.utils import timezone
@@ -155,7 +156,8 @@ class Repository(models.Model):
 
         try:
             parsed = urlparse(self.url)
-            if "gitlab.com" in parsed.netloc:
+            # além do gitlab.com, aceita o host do GitLab configurado (ex.: servidor falso do E2E)
+            if "gitlab.com" in parsed.netloc or parsed.netloc == urlparse(settings.GITLAB_BASE_URL).netloc:
                 parts = [p for p in parsed.path.strip("/").split("/") if p]
                 if parts:
                     self.gitlab_path_with_namespace = "/".join(parts)
