@@ -22,8 +22,9 @@ class SonarQubeJSONSerializer(serializers.Serializer):
 
 
 class MetricsSerializer(serializers.Serializer):
-    sonarqube = SonarQubeJSONSerializer()
-    github = serializers.DictField()
+    sonarqube = SonarQubeJSONSerializer(required=False)
+    github = serializers.DictField(required=False)
+    gitlab = serializers.DictField(required=False)
 
 
 class CalculateResponseSerializer(serializers.Serializer):

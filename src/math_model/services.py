@@ -74,15 +74,15 @@ class MathModelServices:
 
     def build_collected_metrics(self, data: dict) -> List[CollectedMetric]:
         """Constrói instâncias não-persistidas de CollectedMetric a
-        partir do payload bruto da Action (SonarQube + GitHub)."""
+        partir do payload bruto da Action/CI (SonarQube + GitHub/GitLab)."""
         supported_metrics = {sm.key: sm for sm in SupportedMetric.objects.all()}
         # um único created_at por coleta, para que a análise seja identificável
         # por igualdade; persist_all repassa o mesmo instante às camadas calculadas
         collected_at = timezone.now()
         self.collected_at = collected_at
 
-        github_metrics = data["github"]["metrics"] if data.get("github") else []
-        sonar_components = data["sonarqube"]["components"] if data.get("sonarqube") else []
+        process_metrics = (data.get("gitlab") or {}).get("metrics") or (data.get("github") or {}).get("metrics") or []
+        sonar_components = (data.get("sonarqube") or {}).get("components") or []
 
         collected: List[CollectedMetric] = [
             CollectedMetric(
@@ -92,7 +92,7 @@ class MathModelServices:
                 qualifier="TRK",
                 created_at=collected_at,
             )
-            for metric in github_metrics
+            for metric in process_metrics
             if metric["name"] in supported_metrics
         ]
         collected.extend(
