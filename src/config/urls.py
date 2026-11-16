@@ -81,17 +81,18 @@ schema_view = get_schema_view(
     permission_classes=(permissions.AllowAny,),
 )
 
-PRODUCT_PREFIX = "api/v1/organizations/<int:organization_pk>/products/<int:product_pk>/"
+API_V1 = "api/v1/"
+PRODUCT_PREFIX = API_V1 + "organizations/<int:organization_pk>/products/<int:product_pk>/"
 REPO_PREFIX = PRODUCT_PREFIX + "repositories/<int:repository_pk>/"
 
 urlpatterns = [
     path("health/", health_check, name="health-check"),
     path("admin/", admin.site.urls),
-    path("api/v1/", include(main_router.urls)),
-    path("api/v1/", include(org_router.nested_router.urls)),
-    path("api/v1/", include(prod_router.nested_router.urls)),
-    path("api/v1/", include(repo_router.nested_router.urls)),
-    path("api/v1/", include(accounts_urls.urlpatterns)),
+    path(API_V1, include(main_router.urls)),
+    path(API_V1, include(org_router.nested_router.urls)),
+    path(API_V1, include(prod_router.nested_router.urls)),
+    path(API_V1, include(repo_router.nested_router.urls)),
+    path(API_V1, include(accounts_urls.urlpatterns)),
     path(
         REPO_PREFIX + "latest-values/characteristics/<str:characteristic_key>/badge/",
         LatestCalculatedCharacteristicBadgeViewSet.as_view({"get": "list"}),
