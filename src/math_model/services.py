@@ -35,8 +35,6 @@ _GITHUB_METRICS = frozenset(
         "resolved_issues",
         "sum_ci_feedback_times",
         "total_builds",
-        "security_alerts_open",
-        "security_alerts_closed",
     }
 )
 

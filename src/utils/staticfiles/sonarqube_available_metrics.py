@@ -60,14 +60,4 @@ SONARQUBE_AVAILABLE_METRICS = [
         "metric_type": "FLOAT",
         "name": "Technical Debt Ratio",
     },
-    {
-        "key": "security_review_rating",
-        "metric_type": "FLOAT",
-        "name": "Security Review Rating",
-    },
-    {
-        "key": "vulnerabilities",
-        "metric_type": "FLOAT",
-        "name": "Vulnerabilities",
-    },
 ]

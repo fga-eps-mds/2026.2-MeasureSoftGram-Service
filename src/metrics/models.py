@@ -58,10 +58,6 @@ class SupportedMetric(models.Model):
             "comment_lines_density",
             "duplicated_lines_density",
             "sqale_debt_ratio",
-            "security_rating",
-            "security_review_rating",
-            "vulnerabilities",
-            "ncloc",
         }
 
         github_values = [
@@ -69,8 +65,6 @@ class SupportedMetric(models.Model):
             "resolved_issues",
             "sum_ci_feedback_times",
             "total_builds",
-            "security_alerts_open",
-            "security_alerts_closed",
         ]
 
         uts_values: Set[str] = {"test_execution_time", "tests"}
