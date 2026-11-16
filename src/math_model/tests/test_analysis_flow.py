@@ -94,3 +94,13 @@ class AnalysisFlowTest(smoke.MathModelAtomicitySmokeTest):
                 self.client.post(self.url, smoke._full_payload(), format="json")
         self.assertEqual(QualityAnalysis.objects.count(), before)
         self.assertEqual(smoke.CollectedMetric.objects.count(), self.initial_collected)
+
+    def test_null_gitlab_metric_marks_partial(self):
+        payload = smoke._full_payload()
+        payload["gitlab"] = payload.pop("github")
+        payload["gitlab"]["metrics"][0]["value"] = None
+        response = self.client.post(self.url, payload, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        analysis = QualityAnalysis.objects.get(pk=response.data["analysis"])
+        self.assertTrue(analysis.is_partial)
+        self.assertIn("total_issues", analysis.missing_inputs)
