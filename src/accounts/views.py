@@ -5,7 +5,10 @@ from allauth.socialaccount.providers.github.views import GitHubOAuth2Adapter
 from allauth.socialaccount.providers.gitlab.views import GitLabOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
+from dj_rest_auth.serializers import TokenSerializer
 from django.conf import settings
+from django.utils.decorators import method_decorator
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -14,6 +17,11 @@ from rest_framework.views import APIView
 from django.core.cache import cache
 
 from accounts.models import ApiAccessToken, CustomUser
+from accounts.response_serializers import (
+    GitHubOrganizationSerializer,
+    GitLabNamespaceSerializer,
+    ProviderValidateSerializer,
+)
 from accounts.serializers import (
     AccountsCreateSerializer,
     AccountsLoginSerializer,
@@ -26,6 +34,11 @@ from accounts.serializers import (
 JSON_CONTENT_TYPE = "application/json"
 
 
+# o dj-rest-auth responde 200 com o token (sem JWT); o drf_yasg supõe 201 e descreveria o corpo do pedido
+SOCIAL_LOGIN_SCHEMA = method_decorator(name="post", decorator=swagger_auto_schema(responses={200: TokenSerializer}))
+
+
+@SOCIAL_LOGIN_SCHEMA
 class GithubLoginViewSet(SocialLoginView):
     """
     ViewSet para login via OAuth2 do Github
@@ -37,6 +50,7 @@ class GithubLoginViewSet(SocialLoginView):
     client_class = OAuth2Client
 
 
+@SOCIAL_LOGIN_SCHEMA
 class GitlabLoginViewSet(SocialLoginView):
     """
     ViewSet para login via OAuth2 do GitLab
@@ -233,6 +247,7 @@ class GitHubOrganizationsViewSet(viewsets.ViewSet):
             items.extend(next_items)
         return items, None
 
+    @swagger_auto_schema(responses={200: GitHubOrganizationSerializer(many=True)})
     def list(self, request):
         token, err = self._get_token(request.user)
         if err:
@@ -284,6 +299,7 @@ class GitHubOrganizationsViewSet(viewsets.ViewSet):
 class GitLabNamespacesViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(responses={200: GitLabNamespaceSerializer(many=True)})
     def list(self, request):
         user = request.user
         token = user.gitlab_access_token
@@ -426,6 +442,7 @@ class GithubValidateView(APIView):
 
     permission_classes = (AllowAny,)  # Verificação pré-login.
 
+    @swagger_auto_schema(responses={200: ProviderValidateSerializer})
     def post(self, request):
         frontend_client_id = request.data.get("client_id")
         backend_client_id = getattr(settings, "GITHUB_CLIENT_ID", "")
@@ -482,6 +499,7 @@ class GitlabValidateView(APIView):
 
     permission_classes = (AllowAny,)  # Verificação pré-login.
 
+    @swagger_auto_schema(responses={200: ProviderValidateSerializer})
     def post(self, request):
         frontend_client_id = request.data.get("client_id")
         backend_client_id = getattr(settings, "GITLAB_CLIENT_ID", "")

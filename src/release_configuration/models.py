@@ -349,6 +349,10 @@ class ReleaseConfiguration(models.Model):
             "technical_debt_ratio": "technical_debt_ratio",
             "ci_feedback_time": "ci_feedback_time",
             "team_throughput": "team_throughput",
+            "security_rating_measure": "security_rating_measure",
+            "absence_of_vulnerabilities": "absence_of_vulnerabilities",
+            "security_review_rating_measure": "security_review_rating_measure",
+            "security_alerts_resolution": "security_alerts_resolution",
         }
 
         for characteristic in data["characteristics"]:

@@ -324,6 +324,22 @@ class Command(BaseCommand):
                     {"key": "ci_feedback_time"},
                 ],
             },
+            {
+                "key": "confidentiality",
+                "name": "Confidentiality",
+                "measures": [
+                    {"key": "security_rating_measure"},
+                    {"key": "absence_of_vulnerabilities"},
+                ],
+            },
+            {
+                "key": "integrity",
+                "name": "Integrity",
+                "measures": [
+                    {"key": "security_review_rating_measure"},
+                    {"key": "security_alerts_resolution"},
+                ],
+            },
         ]
 
         for subcharacteristic in supported_subcharacteristics:
@@ -368,6 +384,14 @@ class Command(BaseCommand):
                 "name": "Functional Suitability",
                 "subcharacteristics": [
                     {"key": "functional_completeness"},
+                ],
+            },
+            {
+                "key": "security",
+                "name": "Security",
+                "subcharacteristics": [
+                    {"key": "confidentiality"},
+                    {"key": "integrity"},
                 ],
             },
         ]
