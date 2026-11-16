@@ -19,14 +19,4 @@ GITHUB_AVAILABLE_METRICS = [
         "name": "Total issues",
         "metric_type": "INT",
     },
-    {
-        "key": "security_alerts_open",
-        "name": "Open security alerts",
-        "metric_type": "INT",
-    },
-    {
-        "key": "security_alerts_closed",
-        "name": "Closed security alerts",
-        "metric_type": "INT",
-    },
 ]

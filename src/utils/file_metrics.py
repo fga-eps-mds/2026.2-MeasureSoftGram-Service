@@ -8,9 +8,5 @@ FILE_LEVEL_METRICS = frozenset(
         "comment_lines_density",
         "duplicated_lines_density",
         "sqale_debt_ratio",
-        "security_rating",
-        "security_review_rating",
-        "vulnerabilities",
-        "ncloc",
     }
 )

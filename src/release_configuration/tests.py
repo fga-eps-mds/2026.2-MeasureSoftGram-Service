@@ -89,7 +89,7 @@ class TestConfigEnpoints(APITestCaseExpanded):
         self.assertEqual(configs_resp.status_code, status.HTTP_200_OK)
         self.assertTrue(configs_resp.json()["created_config"])
 
-    def test_default_pre_config_offers_security_disabled(self):
+    def test_default_pre_config_returns_the_default_characteristics(self):
         url = reverse(
             "default-pre-config-list",
             kwargs={"organization_pk": self.org.id, "product_pk": self.prod.id},
@@ -98,13 +98,7 @@ class TestConfigEnpoints(APITestCaseExpanded):
         response = self.request.get(url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        weights = {c["key"]: c["weight"] for c in response.json()["characteristics"]}
-        self.assertEqual(weights["security"], 0)
-        self.assertEqual(sum(weights.values()), 100)
-        self.assertNotIn(
-            "security",
-            {c["key"] for c in staticfiles.DEFAULT_PRE_CONFIG["characteristics"]},
-        )
+        self.assertEqual(response.json(), staticfiles.DEFAULT_PRE_CONFIG)
 
 
 class TestReleaseConfigurationImmutability(APITestCaseExpanded):
