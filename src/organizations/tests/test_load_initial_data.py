@@ -173,6 +173,10 @@ class LoadInitialDataFakeDataTestCase(APITestCaseExpanded):
             "team_throughput",
             "ci_feedback_time",
             "technical_debt_ratio",
+            "security_rating_measure",
+            "absence_of_vulnerabilities",
+            "security_review_rating_measure",
+            "security_alerts_resolution",
         }
 
         self.assertEqual(calculated_keys, expected_keys)

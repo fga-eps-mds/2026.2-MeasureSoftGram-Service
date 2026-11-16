@@ -36,7 +36,10 @@ class DefaultPreConfigModelViewSet(
 
     @swagger_auto_schema(responses={200: DefaultPreConfigSerializer})
     def list(self, request, *args, **kwargs):
-        pre_config = staticfiles.DEFAULT_PRE_CONFIG
+        pre_config = {
+            "characteristics": staticfiles.DEFAULT_PRE_CONFIG["characteristics"]
+            + staticfiles.SECURITY_PRE_CONFIG["characteristics"]
+        }
         serializer = DefaultPreConfigSerializer(pre_config)
         return Response(serializer.data, status.HTTP_200_OK)
 
