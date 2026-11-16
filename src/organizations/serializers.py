@@ -515,10 +515,11 @@ class RepositoriesTSQMIHistorySerializer(serializers.ModelSerializer):
             return None
 
 
+LIMIT_OUT_OF_RANGE = "Use um número entre 0 e 1."
 LIMIT_ERROR_MESSAGES = {
-    "invalid": "Use um número entre 0 e 1.",
-    "null": "Use um número entre 0 e 1.",
-    "required": "Use um número entre 0 e 1.",
+    "invalid": LIMIT_OUT_OF_RANGE,
+    "null": LIMIT_OUT_OF_RANGE,
+    "required": LIMIT_OUT_OF_RANGE,
     "max_decimal_places": "Use no máximo duas casas decimais.",
 }
 
