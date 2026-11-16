@@ -4,6 +4,7 @@ from rest_framework.test import APIClient
 from rest_framework.viewsets import reverse
 
 from release_configuration.models import ReleaseConfiguration
+from utils import staticfiles
 from utils.tests import APITestCaseExpanded
 
 # Create your tests here.
@@ -87,6 +88,17 @@ class TestConfigEnpoints(APITestCaseExpanded):
         )
         self.assertEqual(configs_resp.status_code, status.HTTP_200_OK)
         self.assertTrue(configs_resp.json()["created_config"])
+
+    def test_default_pre_config_returns_the_default_characteristics(self):
+        url = reverse(
+            "default-pre-config-list",
+            kwargs={"organization_pk": self.org.id, "product_pk": self.prod.id},
+        )
+
+        response = self.request.get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json(), staticfiles.DEFAULT_PRE_CONFIG)
 
 
 class TestReleaseConfigurationImmutability(APITestCaseExpanded):
