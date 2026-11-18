@@ -75,6 +75,9 @@ class QualityAnalysisModelTest(APITestCaseExpanded):
             characteristic=self.supported_char,
             value=value,
             repository=self.repository,
+            # Preenche o campo legado apenas para validar a remoção do unique_together
+            # no esquema transitório; remover esta linha quando a coluna sair na #104.
+            release=analysis.release,
             analysis=analysis,
         )
         tsqmi = TSQMI.objects.create(
