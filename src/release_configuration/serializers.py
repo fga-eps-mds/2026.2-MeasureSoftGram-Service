@@ -1,3 +1,4 @@
+from core.ahp import CR_THRESHOLD, SAATY_PHRASES, SAATY_SCALE, calculate_group, most_inconsistent
 from drf_yasg.utils import swagger_serializer_method
 from rest_framework import serializers
 
@@ -68,3 +69,90 @@ class CharacteristicSerializer(serializers.Serializer):
 
 class DefaultPreConfigSerializer(serializers.Serializer):
     characteristics = serializers.ListField(child=CharacteristicSerializer())
+
+
+class AHPAnswerSerializer(serializers.Serializer):
+    a = serializers.CharField()
+    b = serializers.CharField()
+    preferred = serializers.CharField(allow_null=True, required=False, default=None)
+    intensity = serializers.CharField()
+
+
+class AHPConflictSerializer(serializers.Serializer):
+    a = serializers.CharField()
+    b = serializers.CharField()
+    answer = AHPAnswerSerializer()
+    suggested = AHPAnswerSerializer()
+    suggested_ratio = serializers.FloatField()
+
+
+class AHPGroupCalculateRequestSerializer(serializers.Serializer):
+    entities = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=False,
+    )
+    answers = AHPAnswerSerializer(many=True)
+
+
+class AHPGroupCalculateResponseSerializer(serializers.Serializer):
+    priorities = serializers.DictField(child=serializers.FloatField())
+    weights = serializers.DictField(child=serializers.IntegerField())
+    consistency_ratio = serializers.FloatField(allow_null=True)
+    consistent = serializers.BooleanField()
+    cr_threshold = serializers.FloatField()
+    conflict = AHPConflictSerializer(allow_null=True)
+
+
+class AHPScaleResponseSerializer(serializers.Serializer):
+    scale = serializers.DictField(child=serializers.IntegerField())
+    phrases = serializers.DictField(child=serializers.CharField())
+    cr_threshold = serializers.FloatField()
+
+
+def _answer_tuple_to_dict(answer_tuple):
+    a, b, preferred, intensity = answer_tuple
+    return {
+        "a": a,
+        "b": b,
+        "preferred": preferred,
+        "intensity": intensity,
+    }
+
+
+def serialize_ahp_scale():
+    return {
+        "scale": dict(SAATY_SCALE),
+        "phrases": dict(SAATY_PHRASES),
+        "cr_threshold": CR_THRESHOLD,
+    }
+
+
+def calculate_and_serialize_ahp_group(entities, answers):
+    answer_tuples = [
+        (item["a"], item["b"], item.get("preferred"), item["intensity"])
+        for item in answers
+    ]
+    try:
+        result = calculate_group(entities, answer_tuples)
+        conflict = most_inconsistent(entities, answer_tuples, result)
+    except ValueError as exc:
+        raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+    return {
+        "priorities": result.priorities,
+        "weights": result.weights,
+        "consistency_ratio": result.consistency_ratio,
+        "consistent": result.consistent,
+        "cr_threshold": CR_THRESHOLD,
+        "conflict": (
+            {
+                "a": conflict.a,
+                "b": conflict.b,
+                "answer": _answer_tuple_to_dict(conflict.answer),
+                "suggested": _answer_tuple_to_dict(conflict.suggested),
+                "suggested_ratio": conflict.suggested_ratio,
+            }
+            if conflict is not None
+            else None
+        ),
+    }
