@@ -59,7 +59,8 @@ class CreateReleaseConfigModelViewSet(
 
     def perform_create(self, serializer):
         product = self.get_product()
-        serializer.save(product=product)
+        user = self.request.user if self.request.user and self.request.user.is_authenticated else None
+        serializer.save(product=product, created_by=user)
 
     def create(self, request, *args, **kwargs):
         data_to_add_metrics = request.data
@@ -78,7 +79,7 @@ class CreateReleaseConfigModelViewSet(
         serializer.is_valid(raise_exception=True)
         product = self.get_product()
         current_release_configuration = product.release_configuration.first()
-        if data_to_add_metrics == current_release_configuration.data:
+        if not data_to_add_metrics.get("comparisons") and data_to_add_metrics == current_release_configuration.data:
             return Response(data_to_add_metrics, status=status.HTTP_200_OK)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)

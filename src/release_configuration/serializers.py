@@ -1,17 +1,36 @@
 from core.ahp import CR_THRESHOLD, SAATY_PHRASES, SAATY_SCALE, calculate_group, most_inconsistent
+from django.db import transaction
 from drf_yasg.utils import swagger_serializer_method
 from rest_framework import serializers
 
-from release_configuration.models import ReleaseConfiguration
+from release_configuration.models import ReleaseConfiguration, ReleaseConfigurationComparison
 from utils.exceptions import InvalidReleaseConfigurationException
+
+
+class AHPAnswerSerializer(serializers.Serializer):
+    a = serializers.CharField()
+    b = serializers.CharField()
+    preferred = serializers.CharField(allow_null=True, required=False, default=None)
+    intensity = serializers.CharField()
+
+
+class AHPGroupComparisonInputSerializer(serializers.Serializer):
+    group_path = serializers.CharField()
+    entities = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=False,
+    )
+    answers = AHPAnswerSerializer(many=True)
+    accepted_inconsistent = serializers.BooleanField(required=False, default=False)
 
 
 class ReleaseConfigurationSerializer(serializers.ModelSerializer):
     created_config = serializers.SerializerMethodField("has_created_config")
+    comparisons = AHPGroupComparisonInputSerializer(many=True, required=False, write_only=True)
 
     class Meta:
         model = ReleaseConfiguration
-        fields = ("id", "name", "data", "created_at", "created_config")
+        fields = ("id", "name", "data", "created_at", "created_config", "comparisons")
         extra_kwargs = {
             "created_at": {"read_only": True},
             "created_config": {
@@ -45,7 +64,29 @@ class ReleaseConfigurationSerializer(serializers.ModelSerializer):
         except InvalidReleaseConfigurationException as exc:
             raise serializers.ValidationError(exc) from exc
 
+        if "comparisons" in attrs and attrs["comparisons"] is not None:
+            attrs["comparisons"] = validate_and_build_ahp_comparisons(data, attrs["comparisons"])
+
         return attrs
+
+    def create(self, validated_data):
+        comparisons = validated_data.pop("comparisons", None)
+        created_by = validated_data.pop("created_by", None)
+        if created_by is None:
+            request = self.context.get("request")
+            user = getattr(request, "user", None)
+            if user is not None and getattr(user, "is_authenticated", False):
+                created_by = user
+
+        with transaction.atomic():
+            release_config = super().create(validated_data)
+            if comparisons:
+                ReleaseConfigurationComparison.objects.create(
+                    release_configuration=release_config,
+                    created_by=created_by,
+                    groups=comparisons,
+                )
+        return release_config
 
 
 class MeasureSerializer(serializers.Serializer):
@@ -69,13 +110,6 @@ class CharacteristicSerializer(serializers.Serializer):
 
 class DefaultPreConfigSerializer(serializers.Serializer):
     characteristics = serializers.ListField(child=CharacteristicSerializer())
-
-
-class AHPAnswerSerializer(serializers.Serializer):
-    a = serializers.CharField()
-    b = serializers.CharField()
-    preferred = serializers.CharField(allow_null=True, required=False, default=None)
-    intensity = serializers.CharField()
 
 
 class AHPConflictSerializer(serializers.Serializer):
@@ -156,3 +190,103 @@ def calculate_and_serialize_ahp_group(entities, answers):
             else None
         ),
     }
+
+
+def _resolve_group_items(data, group_path):
+    parts = [part for part in group_path.strip("/").split("/") if part]
+    characteristics = data.get("characteristics", [])
+
+    if parts == ["characteristics"]:
+        return characteristics
+
+    if len(parts) == 2 and parts[1] == "subcharacteristics":
+        char_key = parts[0]
+        for char in characteristics:
+            if char.get("key") == char_key:
+                return char.get("subcharacteristics", [])
+        raise serializers.ValidationError({"comparisons": f"Unknown characteristic in group_path: `{group_path}`."})
+
+    if len(parts) == 3 and parts[2] == "measures":
+        char_key, subchar_key, _ = parts
+        for char in characteristics:
+            if char.get("key") == char_key:
+                for subchar in char.get("subcharacteristics", []):
+                    if subchar.get("key") == subchar_key:
+                        return subchar.get("measures", [])
+        raise serializers.ValidationError(
+            {"comparisons": f"Unknown subcharacteristic in group_path: `{group_path}`."}
+        )
+
+    raise serializers.ValidationError({"comparisons": f"Invalid group_path: `{group_path}`."})
+
+
+def validate_and_build_ahp_comparisons(data, comparisons):
+    seen_paths = set()
+    validated_groups = []
+
+    for group in comparisons:
+        group_path = group["group_path"].strip("/")
+        if group_path in seen_paths:
+            raise serializers.ValidationError({"comparisons": f"Duplicate group_path: `{group_path}`."})
+        seen_paths.add(group_path)
+
+        group_items = _resolve_group_items(data, group_path)
+        expected_entities = [item["key"] for item in group_items]
+        entities = group["entities"]
+
+        if entities != expected_entities:
+            raise serializers.ValidationError(
+                {
+                    "comparisons": (
+                        f"Entities for group `{group_path}` do not match configuration order: "
+                        f"expected {expected_entities}, got {entities}."
+                    )
+                }
+            )
+
+        calc = calculate_and_serialize_ahp_group(entities, group["answers"])
+        accepted_inconsistent = bool(group.get("accepted_inconsistent", False))
+
+        if not calc["consistent"] and not accepted_inconsistent:
+            raise serializers.ValidationError(
+                {
+                    "comparisons": (
+                        f"Group `{group_path}` has consistency_ratio {calc['consistency_ratio']:.4f} "
+                        f"above {CR_THRESHOLD} and was not explicitly accepted."
+                    )
+                }
+            )
+
+        actual_weights = {item["key"]: item["weight"] for item in group_items}
+        if actual_weights != calc["weights"]:
+            raise serializers.ValidationError(
+                {
+                    "comparisons": (
+                        f"Weights in data for group `{group_path}` ({actual_weights}) "
+                        f"do not match calculated AHP weights ({calc['weights']})."
+                    )
+                }
+            )
+
+        validated_groups.append(
+            {
+                "group_path": group_path,
+                "entities": entities,
+                "answers": [
+                    {
+                        "a": ans["a"],
+                        "b": ans["b"],
+                        "preferred": ans.get("preferred"),
+                        "intensity": ans["intensity"],
+                    }
+                    for ans in group["answers"]
+                ],
+                "priorities": calc["priorities"],
+                "weights": calc["weights"],
+                "consistency_ratio": calc["consistency_ratio"],
+                "consistent": calc["consistent"],
+                "accepted_inconsistent": bool(accepted_inconsistent and not calc["consistent"]),
+            }
+        )
+
+    return validated_groups
