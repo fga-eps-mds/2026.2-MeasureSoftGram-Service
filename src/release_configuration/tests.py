@@ -324,3 +324,322 @@ class TestAHPScaleAndCalculateEndpoints(APITestCaseExpanded):
             format="json",
         )
         self.assertEqual(invalid_intensity_resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class TestCreateReleaseConfigWithAHPComparisons(APITestCaseExpanded):
+    def setUp(self):
+        self.request = APIClient()
+        self.user = self.get_or_create_test_user()
+        self.token = Token.objects.create(user=self.user)
+        self.request.force_authenticate(user=self.user, token=self.token)
+        self.org = self.get_organization()
+        self.prod = self.get_product(self.org)
+        self.create_url = reverse(
+            "create-release-config-list",
+            kwargs={"organization_pk": self.org.id, "product_pk": self.prod.id},
+        )
+
+    def _build_three_characteristics_data(self, char_weights, sub_weights=None, measure_weights=None):
+        sub_weights = sub_weights or {"testing_status": 17, "maturity": 83}
+        measure_weights = measure_weights or {
+            "passed_tests": 65,
+            "test_builds": 7,
+            "test_coverage": 28,
+        }
+        return {
+            "characteristics": [
+                {
+                    "key": "reliability",
+                    "weight": char_weights["reliability"],
+                    "subcharacteristics": [
+                        {
+                            "key": "testing_status",
+                            "weight": sub_weights["testing_status"],
+                            "measures": [
+                                {
+                                    "key": "passed_tests",
+                                    "weight": measure_weights["passed_tests"],
+                                    "min_threshold": 0,
+                                    "max_threshold": 1,
+                                },
+                                {
+                                    "key": "test_builds",
+                                    "weight": measure_weights["test_builds"],
+                                    "min_threshold": 0,
+                                    "max_threshold": 300,
+                                },
+                                {
+                                    "key": "test_coverage",
+                                    "weight": measure_weights["test_coverage"],
+                                    "min_threshold": 0,
+                                    "max_threshold": 100,
+                                },
+                            ],
+                        },
+                        {
+                            "key": "maturity",
+                            "weight": sub_weights["maturity"],
+                            "measures": [
+                                {
+                                    "key": "ci_feedback_time",
+                                    "weight": 100,
+                                    "min_threshold": 1,
+                                    "max_threshold": 900,
+                                }
+                            ],
+                        },
+                    ],
+                },
+                {
+                    "key": "maintainability",
+                    "weight": char_weights["maintainability"],
+                    "subcharacteristics": [
+                        {
+                            "key": "modifiability",
+                            "weight": 100,
+                            "measures": [
+                                {
+                                    "key": "non_complex_file_density",
+                                    "weight": 100,
+                                    "min_threshold": 0,
+                                    "max_threshold": 1,
+                                }
+                            ],
+                        }
+                    ],
+                },
+                {
+                    "key": "functional_suitability",
+                    "weight": char_weights["functional_suitability"],
+                    "subcharacteristics": [
+                        {
+                            "key": "functional_completeness",
+                            "weight": 100,
+                            "measures": [
+                                {
+                                    "key": "team_throughput",
+                                    "weight": 100,
+                                    "min_threshold": 45,
+                                    "max_threshold": 100,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ]
+        }
+
+    def _valid_comparisons_payload(self):
+        return [
+            {
+                "group_path": "characteristics",
+                "entities": ["reliability", "maintainability", "functional_suitability"],
+                "answers": [
+                    {
+                        "a": "reliability",
+                        "b": "maintainability",
+                        "preferred": None,
+                        "intensity": "igual",
+                    },
+                    {
+                        "a": "reliability",
+                        "b": "functional_suitability",
+                        "preferred": "reliability",
+                        "intensity": "moderadamente",
+                    },
+                    {
+                        "a": "maintainability",
+                        "b": "functional_suitability",
+                        "preferred": "maintainability",
+                        "intensity": "moderadamente",
+                    },
+                ],
+            },
+            {
+                "group_path": "reliability/subcharacteristics",
+                "entities": ["testing_status", "maturity"],
+                "answers": [
+                    {
+                        "a": "testing_status",
+                        "b": "maturity",
+                        "preferred": "maturity",
+                        "intensity": "fortemente",
+                    }
+                ],
+            },
+            {
+                "group_path": "reliability/testing_status/measures",
+                "entities": ["passed_tests", "test_builds", "test_coverage"],
+                "answers": [
+                    {
+                        "a": "passed_tests",
+                        "b": "test_builds",
+                        "preferred": "passed_tests",
+                        "intensity": "muito_fortemente",
+                    },
+                    {
+                        "a": "passed_tests",
+                        "b": "test_coverage",
+                        "preferred": "passed_tests",
+                        "intensity": "moderadamente",
+                    },
+                    {
+                        "a": "test_builds",
+                        "b": "test_coverage",
+                        "preferred": "test_coverage",
+                        "intensity": "fortemente",
+                    },
+                ],
+            },
+        ]
+
+    def test_create_release_config_with_valid_ahp_comparisons_persists_clean_data_and_record(self):
+        payload = {
+            "name": "AHP Release Config",
+            "data": self._build_three_characteristics_data(
+                {"reliability": 43, "maintainability": 43, "functional_suitability": 14}
+            ),
+            "comparisons": self._valid_comparisons_payload(),
+        }
+        response = self.request.post(self.create_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        created_config = ReleaseConfiguration.objects.get(id=response.json()["id"])
+        self.assertNotIn("comparisons", created_config.data)
+        self.assertTrue(hasattr(created_config, "ahp_comparison"))
+
+        comparison = created_config.ahp_comparison
+        self.assertEqual(comparison.created_by, self.user)
+        self.assertIn(f"ReleaseConfiguration: {created_config.id}", str(comparison))
+        self.assertEqual(len(comparison.groups), 3)
+        self.assertEqual(comparison.groups[0]["group_path"], "characteristics")
+        self.assertEqual(
+            comparison.groups[0]["weights"],
+            {"reliability": 43, "maintainability": 43, "functional_suitability": 14},
+        )
+        self.assertTrue(comparison.groups[0]["consistent"])
+        self.assertFalse(comparison.groups[0]["accepted_inconsistent"])
+
+    def test_create_release_config_rejects_mismatched_weights_against_ahp(self):
+        initial_count = ReleaseConfiguration.objects.count()
+        payload = {
+            "name": "Tampered AHP Config",
+            "data": self._build_three_characteristics_data(
+                {"reliability": 50, "maintainability": 30, "functional_suitability": 20}
+            ),
+            "comparisons": [self._valid_comparisons_payload()[0]],
+        }
+        response = self.request.post(self.create_url, payload, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(ReleaseConfiguration.objects.count(), initial_count)
+        self.assertEqual(ReleaseConfigurationComparison.objects.count(), 0)
+
+    def test_create_release_config_handles_inconsistent_group_rejection_and_explicit_acceptance(self):
+        circular_comparison = {
+            "group_path": "characteristics",
+            "entities": ["reliability", "maintainability", "functional_suitability"],
+            "answers": [
+                {
+                    "a": "reliability",
+                    "b": "maintainability",
+                    "preferred": "reliability",
+                    "intensity": "muito_fortemente",
+                },
+                {
+                    "a": "reliability",
+                    "b": "functional_suitability",
+                    "preferred": "functional_suitability",
+                    "intensity": "muito_fortemente",
+                },
+                {
+                    "a": "maintainability",
+                    "b": "functional_suitability",
+                    "preferred": "maintainability",
+                    "intensity": "muito_fortemente",
+                },
+            ],
+            "accepted_inconsistent": False,
+        }
+        data = self._build_three_characteristics_data(
+            {"reliability": 34, "maintainability": 33, "functional_suitability": 33}
+        )
+
+        rejected_resp = self.request.post(
+            self.create_url,
+            {"name": "Rejected Circular", "data": data, "comparisons": [circular_comparison]},
+            format="json",
+        )
+        self.assertEqual(rejected_resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+        circular_comparison["accepted_inconsistent"] = True
+        accepted_resp = self.request.post(
+            self.create_url,
+            {"name": "Accepted Circular", "data": data, "comparisons": [circular_comparison]},
+            format="json",
+        )
+        self.assertEqual(accepted_resp.status_code, status.HTTP_201_CREATED)
+        created_config = ReleaseConfiguration.objects.get(id=accepted_resp.json()["id"])
+        group_record = created_config.ahp_comparison.groups[0]
+        self.assertFalse(group_record["consistent"])
+        self.assertTrue(group_record["accepted_inconsistent"])
+        self.assertAlmostEqual(group_record["consistency_ratio"], 4.9451, places=3)
+
+    def test_create_release_config_rejects_invalid_group_paths_duplicates_and_wrong_entity_order(self):
+        base_data = self._build_three_characteristics_data(
+            {"reliability": 43, "maintainability": 43, "functional_suitability": 14}
+        )
+        valid_char_comp = self._valid_comparisons_payload()[0]
+
+        invalid_cases = [
+            ("duplicate_path", [valid_char_comp, valid_char_comp]),
+            (
+                "unknown_char",
+                [{**valid_char_comp, "group_path": "unknown/subcharacteristics"}],
+            ),
+            (
+                "unknown_subchar",
+                [{**valid_char_comp, "group_path": "reliability/unknown/measures"}],
+            ),
+            (
+                "unknown_char_in_measures",
+                [{**valid_char_comp, "group_path": "unknown/testing_status/measures"}],
+            ),
+            (
+                "invalid_path_format",
+                [{**valid_char_comp, "group_path": "invalid/path/too/deep"}],
+            ),
+            (
+                "wrong_entity_order",
+                [
+                    {
+                        **valid_char_comp,
+                        "entities": ["maintainability", "reliability", "functional_suitability"],
+                    }
+                ],
+            ),
+        ]
+
+        for label, comparisons in invalid_cases:
+            with self.subTest(case=label):
+                resp = self.request.post(
+                    self.create_url,
+                    {"name": f"Invalid {label}", "data": base_data, "comparisons": comparisons},
+                    format="json",
+                )
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_release_configuration_comparison_is_immutable(self):
+        default_config = self.prod.release_configuration.first()
+        self.assertFalse(hasattr(default_config, "ahp_comparison"))
+
+        comparison = ReleaseConfigurationComparison.objects.create(
+            release_configuration=default_config,
+            created_by=self.user,
+            groups=[],
+        )
+        with self.assertRaises(ValueError):
+            comparison.save()
+        with self.assertRaises(ValueError):
+            ReleaseConfigurationComparison.objects.filter(pk=comparison.pk).update(groups=[{"x": 1}])
+        with self.assertRaises(ValueError):
+            ReleaseConfigurationComparison.objects.bulk_update([comparison], ["groups"])
