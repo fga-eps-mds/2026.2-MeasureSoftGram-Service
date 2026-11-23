@@ -192,6 +192,31 @@ def calculate_and_serialize_ahp_group(entities, answers):
     }
 
 
+def _find_item_by_key(items, key):
+    for item in items:
+        if item.get("key") == key:
+            return item
+    return None
+
+
+def _resolve_subcharacteristics_group(characteristics, group_path, char_key):
+    char = _find_item_by_key(characteristics, char_key)
+    if char is not None:
+        return char.get("subcharacteristics", [])
+    raise serializers.ValidationError({"comparisons": f"Unknown characteristic in group_path: `{group_path}`."})
+
+
+def _resolve_measures_group(characteristics, group_path, char_key, subchar_key):
+    char = _find_item_by_key(characteristics, char_key)
+    if char is not None:
+        subchar = _find_item_by_key(char.get("subcharacteristics", []), subchar_key)
+        if subchar is not None:
+            return subchar.get("measures", [])
+    raise serializers.ValidationError(
+        {"comparisons": f"Unknown subcharacteristic in group_path: `{group_path}`."}
+    )
+
+
 def _resolve_group_items(data, group_path):
     parts = [part for part in group_path.strip("/").split("/") if part]
     characteristics = data.get("characteristics", [])
@@ -200,24 +225,77 @@ def _resolve_group_items(data, group_path):
         return characteristics
 
     if len(parts) == 2 and parts[1] == "subcharacteristics":
-        char_key = parts[0]
-        for char in characteristics:
-            if char.get("key") == char_key:
-                return char.get("subcharacteristics", [])
-        raise serializers.ValidationError({"comparisons": f"Unknown characteristic in group_path: `{group_path}`."})
+        return _resolve_subcharacteristics_group(characteristics, group_path, parts[0])
 
     if len(parts) == 3 and parts[2] == "measures":
-        char_key, subchar_key, _ = parts
-        for char in characteristics:
-            if char.get("key") == char_key:
-                for subchar in char.get("subcharacteristics", []):
-                    if subchar.get("key") == subchar_key:
-                        return subchar.get("measures", [])
-        raise serializers.ValidationError(
-            {"comparisons": f"Unknown subcharacteristic in group_path: `{group_path}`."}
-        )
+        return _resolve_measures_group(characteristics, group_path, parts[0], parts[1])
 
     raise serializers.ValidationError({"comparisons": f"Invalid group_path: `{group_path}`."})
+
+
+def _build_validated_group_payload(group_path, entities, answers, calc, accepted_inconsistent):
+    return {
+        "group_path": group_path,
+        "entities": entities,
+        "answers": [
+            {
+                "a": ans["a"],
+                "b": ans["b"],
+                "preferred": ans.get("preferred"),
+                "intensity": ans["intensity"],
+            }
+            for ans in answers
+        ],
+        "priorities": calc["priorities"],
+        "weights": calc["weights"],
+        "consistency_ratio": calc["consistency_ratio"],
+        "consistent": calc["consistent"],
+        "accepted_inconsistent": bool(accepted_inconsistent and not calc["consistent"]),
+    }
+
+
+def _validate_and_build_single_group(data, group, group_path):
+    group_items = _resolve_group_items(data, group_path)
+    expected_entities = [item["key"] for item in group_items]
+    entities = group["entities"]
+
+    if entities != expected_entities:
+        raise serializers.ValidationError(
+            {
+                "comparisons": (
+                    f"Entities for group `{group_path}` do not match configuration order: "
+                    f"expected {expected_entities}, got {entities}."
+                )
+            }
+        )
+
+    calc = calculate_and_serialize_ahp_group(entities, group["answers"])
+    accepted_inconsistent = bool(group.get("accepted_inconsistent", False))
+
+    if not calc["consistent"] and not accepted_inconsistent:
+        raise serializers.ValidationError(
+            {
+                "comparisons": (
+                    f"Group `{group_path}` has consistency_ratio {calc['consistency_ratio']:.4f} "
+                    f"above {CR_THRESHOLD} and was not explicitly accepted."
+                )
+            }
+        )
+
+    actual_weights = {item["key"]: item["weight"] for item in group_items}
+    if actual_weights != calc["weights"]:
+        raise serializers.ValidationError(
+            {
+                "comparisons": (
+                    f"Weights in data for group `{group_path}` ({actual_weights}) "
+                    f"do not match calculated AHP weights ({calc['weights']})."
+                )
+            }
+        )
+
+    return _build_validated_group_payload(
+        group_path, entities, group["answers"], calc, accepted_inconsistent
+    )
 
 
 def validate_and_build_ahp_comparisons(data, comparisons):
@@ -230,63 +308,7 @@ def validate_and_build_ahp_comparisons(data, comparisons):
             raise serializers.ValidationError({"comparisons": f"Duplicate group_path: `{group_path}`."})
         seen_paths.add(group_path)
 
-        group_items = _resolve_group_items(data, group_path)
-        expected_entities = [item["key"] for item in group_items]
-        entities = group["entities"]
-
-        if entities != expected_entities:
-            raise serializers.ValidationError(
-                {
-                    "comparisons": (
-                        f"Entities for group `{group_path}` do not match configuration order: "
-                        f"expected {expected_entities}, got {entities}."
-                    )
-                }
-            )
-
-        calc = calculate_and_serialize_ahp_group(entities, group["answers"])
-        accepted_inconsistent = bool(group.get("accepted_inconsistent", False))
-
-        if not calc["consistent"] and not accepted_inconsistent:
-            raise serializers.ValidationError(
-                {
-                    "comparisons": (
-                        f"Group `{group_path}` has consistency_ratio {calc['consistency_ratio']:.4f} "
-                        f"above {CR_THRESHOLD} and was not explicitly accepted."
-                    )
-                }
-            )
-
-        actual_weights = {item["key"]: item["weight"] for item in group_items}
-        if actual_weights != calc["weights"]:
-            raise serializers.ValidationError(
-                {
-                    "comparisons": (
-                        f"Weights in data for group `{group_path}` ({actual_weights}) "
-                        f"do not match calculated AHP weights ({calc['weights']})."
-                    )
-                }
-            )
-
-        validated_groups.append(
-            {
-                "group_path": group_path,
-                "entities": entities,
-                "answers": [
-                    {
-                        "a": ans["a"],
-                        "b": ans["b"],
-                        "preferred": ans.get("preferred"),
-                        "intensity": ans["intensity"],
-                    }
-                    for ans in group["answers"]
-                ],
-                "priorities": calc["priorities"],
-                "weights": calc["weights"],
-                "consistency_ratio": calc["consistency_ratio"],
-                "consistent": calc["consistent"],
-                "accepted_inconsistent": bool(accepted_inconsistent and not calc["consistent"]),
-            }
-        )
+        validated_group = _validate_and_build_single_group(data, group, group_path)
+        validated_groups.append(validated_group)
 
     return validated_groups
