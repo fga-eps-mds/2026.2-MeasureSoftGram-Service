@@ -35,6 +35,8 @@ from organizations.serializers import (
     RepositoryTSQMILatestValueSerializer,
 )
 
+GITLAB_NOT_LINKED = "GitLab account not linked."
+
 JSON_CONTENT_TYPE = "application/json"
 
 
@@ -320,7 +322,7 @@ class ImportGitLabGroupViewSet(viewsets.ViewSet):
         user = request.user
         token = user.gitlab_access_token
         if not token:
-            return Response({"error": "GitLab account not linked."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": GITLAB_NOT_LINKED}, status=status.HTTP_400_BAD_REQUEST)
 
         headers = {"Authorization": f"Bearer {token}", "Accept": JSON_CONTENT_TYPE}
         timeout = getattr(settings, "GITLAB_TIMEOUT", 10)
@@ -373,7 +375,7 @@ class ImportGitLabPersonalViewSet(viewsets.ViewSet):
         user = request.user
         token = user.gitlab_access_token
         if not token:
-            return Response({"error": "GitLab account not linked."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": GITLAB_NOT_LINKED}, status=status.HTTP_400_BAD_REQUEST)
 
         headers = {"Authorization": f"Bearer {token}", "Accept": JSON_CONTENT_TYPE}
         timeout = getattr(settings, "GITLAB_TIMEOUT", 10)
@@ -563,7 +565,7 @@ class GitLabProjectsViewSet(UserScopedMixin, viewsets.ViewSet):
                 st.delete()
             else:
                 return Response(
-                    {"error": "GitLab account not linked."},
+                    {"error": GITLAB_NOT_LINKED},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
