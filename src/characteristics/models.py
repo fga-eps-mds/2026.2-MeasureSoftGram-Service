@@ -109,10 +109,10 @@ class SupportedCharacteristic(models.Model):
         Sobrescreve o método save para validar se o campo `key` é valido
         """
         if not self.key and self.name:
-            self.key = utils.namefy(self.name)
+            self.key = utils.keyfy(self.name)
 
         elif not self.name and self.key:
-            self.name = utils.keyfy(self.key)
+            self.name = utils.namefy(self.key)
 
         super().save(*args, **kwargs)
 
