@@ -6,6 +6,8 @@ from goals.views import CompareGoalsModelViewSet, CreateGoalModelViewSet, Curren
 from organizations.routers.routers import Router
 from organizations.views import RepositoriesTSQMIHistoryViewSet, RepositoriesTSQMILatestValueViewSet, RepositoryViewSet
 from release_configuration.views import (
+    AHPGroupCalculateViewSet,
+    AHPScaleViewSet,
     CreateReleaseConfigModelViewSet,
     CurrentReleaseConfigModelViewSet,
     DefaultPreConfigModelViewSet,
@@ -123,5 +125,15 @@ class ProductRouter(Router):
                 "name": "create/release-config",
                 "view": CreateReleaseConfigModelViewSet,
                 "basename": "create-release-config",
+            },
+            {
+                "name": "ahp/scale",
+                "view": AHPScaleViewSet,
+                "basename": "ahp-scale",
+            },
+            {
+                "name": "ahp/calculate",
+                "view": AHPGroupCalculateViewSet,
+                "basename": "ahp-calculate",
             },
         ]
