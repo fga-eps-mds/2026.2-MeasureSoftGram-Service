@@ -38,6 +38,13 @@ class SupportedCharacteristicModelCoverageTestCase(APITestCaseExpanded):
         )
         self.assertEqual(char_without_name.name, "Portability Level")
 
+    def test_subcharacteristic_save_populates_key_from_name(self):
+        sub = SupportedSubCharacteristic.objects.create(
+            name="Custom Modifiability",
+            key="",
+        )
+        self.assertEqual(sub.key, "custom_modifiability")
+
     def test_get_latest_characteristic_value_returns_none_or_latest_value(self):
         reliability = SupportedCharacteristic.objects.get(key="reliability")
         self.assertIsNone(reliability.get_latest_characteristic_value())
