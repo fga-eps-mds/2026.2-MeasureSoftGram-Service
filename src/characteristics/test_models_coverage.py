@@ -27,16 +27,16 @@ class SupportedCharacteristicModelCoverageTestCase(APITestCaseExpanded):
 
     def test_save_populates_key_from_name_and_name_from_key(self):
         char_without_key = SupportedCharacteristic.objects.create(
-            name="custom_security",
+            name="Custom Security",
             key="",
         )
-        self.assertEqual(char_without_key.key, "Custom Security")
+        self.assertEqual(char_without_key.key, "custom_security")
 
         char_without_name = SupportedCharacteristic.objects.create(
             name="",
-            key="Portability Level",
+            key="portability_level",
         )
-        self.assertEqual(char_without_name.name, "portability_level")
+        self.assertEqual(char_without_name.name, "Portability Level")
 
     def test_get_latest_characteristic_value_returns_none_or_latest_value(self):
         reliability = SupportedCharacteristic.objects.get(key="reliability")
