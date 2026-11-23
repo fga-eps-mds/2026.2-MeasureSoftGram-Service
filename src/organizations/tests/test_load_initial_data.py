@@ -337,3 +337,25 @@ class LoadInitialDataProtegeDadosReaisTestCase(TransactionTestCase):
         call_command("load_initial_data", fake_data=True)
 
         self.assertEqual(contagem(), primeira)
+
+
+class LoadInitialDataSuperadminTestCase(TestCase):
+    """O superusuário só vem das variáveis do ambiente, sem o admin/admin de antes (BUG05.04, #151)."""
+
+    @patch.dict(os.environ, {}, clear=False)
+    def test_sem_credenciais_no_ambiente_nao_cria_superusuario(self):
+        os.environ.pop("SUPERADMIN_USERNAME", None)
+        os.environ.pop("SUPERADMIN_PASSWORD", None)
+
+        with self.assertLogs("organizations.management.commands.load_initial_data", level="WARNING"):
+            Command().create_superadmin()
+
+        self.assertFalse(get_user_model().objects.filter(is_superuser=True).exists())
+
+    @patch.dict(os.environ, {"SUPERADMIN_USERNAME": "gestora", "SUPERADMIN_PASSWORD": "senha-forte-123"})
+    def test_com_credenciais_cria_o_superusuario_informado(self):
+        Command().create_superadmin()
+
+        user = get_user_model().objects.get(username="gestora")
+        self.assertTrue(user.is_superuser)
+        self.assertTrue(user.check_password("senha-forte-123"))
