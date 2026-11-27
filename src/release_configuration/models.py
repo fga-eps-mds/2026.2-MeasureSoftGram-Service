@@ -364,3 +364,39 @@ class ReleaseConfiguration(models.Model):
                         )
                     except Exception as e:
                         raise InvalidReleaseConfigurationException(f"Invalid Threshold! {str(measure)} {str(e)}")
+
+
+class ReleaseConfigurationComparison(models.Model):
+    """
+    Registro imutável das comparações par a par (AHP) e do CR associados a uma
+    ReleaseConfiguration, armazenado fora do campo `data` para não interferir nos
+    schemas do Core durante o cálculo do TSQMI.
+    """
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    objects = ImmutableQuerySet.as_manager()
+
+    release_configuration = models.OneToOneField(
+        to="release_configuration.ReleaseConfiguration",
+        related_name="ahp_comparison",
+        on_delete=models.CASCADE,
+    )
+    created_by = models.ForeignKey(
+        to="accounts.CustomUser",
+        related_name="release_configuration_comparisons",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    groups = models.JSONField()
+
+    def __str__(self):
+        return f"ID: {self.id}, ReleaseConfiguration: {self.release_configuration_id}"
+
+    def save(self, *args, **kwargs):
+        if self.id:
+            raise ValueError(RELEASE_CONFIGURATION_EDIT_NOT_ALLOWED)
+        super().save(*args, **kwargs)

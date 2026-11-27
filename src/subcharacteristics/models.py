@@ -33,7 +33,7 @@ class SupportedSubCharacteristic(models.Model):
         Sobrescreve o método save para validar se o campo `key` é valido
         """
         if not self.key:
-            self.key = utils.namefy(self.name)
+            self.key = utils.keyfy(self.name)
         super().save(*args, **kwargs)
 
     def get_latest_subcharacteristic_value(self) -> Union[float, None]:

@@ -5,7 +5,15 @@ from staticfiles import SUPPORTED_MEASURES
 
 from organizations.mixins import UserScopedMixin
 from release_configuration.models import ReleaseConfiguration
-from release_configuration.serializers import DefaultPreConfigSerializer, ReleaseConfigurationSerializer
+from release_configuration.serializers import (
+    AHPGroupCalculateRequestSerializer,
+    AHPGroupCalculateResponseSerializer,
+    AHPScaleResponseSerializer,
+    DefaultPreConfigSerializer,
+    ReleaseConfigurationSerializer,
+    calculate_and_serialize_ahp_group,
+    serialize_ahp_scale,
+)
 from utils import staticfiles
 
 
@@ -51,7 +59,8 @@ class CreateReleaseConfigModelViewSet(
 
     def perform_create(self, serializer):
         product = self.get_product()
-        serializer.save(product=product)
+        user = self.request.user if self.request.user and self.request.user.is_authenticated else None
+        serializer.save(product=product, created_by=user)
 
     def create(self, request, *args, **kwargs):
         data_to_add_metrics = request.data
@@ -70,8 +79,47 @@ class CreateReleaseConfigModelViewSet(
         serializer.is_valid(raise_exception=True)
         product = self.get_product()
         current_release_configuration = product.release_configuration.first()
-        if data_to_add_metrics == current_release_configuration.data:
+        if not data_to_add_metrics.get("comparisons") and data_to_add_metrics == current_release_configuration.data:
             return Response(data_to_add_metrics, status=status.HTTP_200_OK)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+
+class AHPScaleViewSet(
+    UserScopedMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = ReleaseConfiguration.objects.all()
+    serializer_class = AHPScaleResponseSerializer
+
+    @swagger_auto_schema(responses={200: AHPScaleResponseSerializer})
+    def list(self, request, *args, **kwargs):
+        self.get_product()
+        serializer = AHPScaleResponseSerializer(serialize_ahp_scale())
+        return Response(serializer.data, status.HTTP_200_OK)
+
+
+class AHPGroupCalculateViewSet(
+    UserScopedMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = ReleaseConfiguration.objects.all()
+    serializer_class = AHPGroupCalculateRequestSerializer
+
+    @swagger_auto_schema(
+        request_body=AHPGroupCalculateRequestSerializer,
+        responses={200: AHPGroupCalculateResponseSerializer},
+    )
+    def create(self, request, *args, **kwargs):
+        self.get_product()
+        request_serializer = self.get_serializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
+        result = calculate_and_serialize_ahp_group(
+            request_serializer.validated_data["entities"],
+            request_serializer.validated_data["answers"],
+        )
+        response_serializer = AHPGroupCalculateResponseSerializer(result)
+        return Response(response_serializer.data, status=status.HTTP_200_OK)

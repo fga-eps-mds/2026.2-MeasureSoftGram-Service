@@ -59,9 +59,9 @@ services:
       - ./env-vars/.postgres.env
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.production
-      # Deploy de demonstracao: popula dashboards com dados falsos.
-      # Setar "FALSE" (ou remover) em producao real com dados de verdade.
-      CREATE_FAKE_DATA: "TRUE"
+      # Producao sem dados de demonstracao (BUG05.04, #151): o load_initial_data
+      # so carrega a metodologia. O superusuario vem de SUPERADMIN_* no .service.env.
+      CREATE_FAKE_DATA: "FALSE"
     depends_on:
       db:
         condition: service_healthy

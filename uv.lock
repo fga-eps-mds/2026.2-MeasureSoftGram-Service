@@ -11,6 +11,19 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "ahpy"
+version = "2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d5/25/a2e9572a35742d641272e3fd0b0631d56a9732267ee0e89843521c9ec5d3/ahpy-2.1.tar.gz", hash = "sha256:36b725f611218b6adc179751f413cbf1e582cb5d8ddb4f6bab6ad5d8afd11310", size = 48903, upload-time = "2025-09-18T19:44:07.774Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0a/94/291d88fbba483b695e179ed1a67655bf6a9104c43bef1f311b7de568ba69/ahpy-2.1-py3-none-any.whl", hash = "sha256:380e253a521439ba18ae36a3f33fe549d0df62053d96e528d9cc1641c8c35a33", size = 21593, upload-time = "2025-09-18T19:44:06.423Z" },
+]
+
+[[package]]
 name = "asgiref"
 version = "3.8.1"
 source = { registry = "https://pypi.org/simple" }
@@ -654,7 +667,7 @@ requires-dist = [
     { name = "drf-nested-routers", specifier = "==0.95.3" },
     { name = "drf-yasg", specifier = "==1.21.15" },
     { name = "gunicorn", specifier = "==20.1.0" },
-    { name = "msgram-core", specifier = "==1.5.5rc4" },
+    { name = "msgram-core", specifier = "==1.5.5rc7" },
     { name = "psycopg2-binary", specifier = "==2.9.11" },
     { name = "pytz", specifier = "==2022.1" },
     { name = "requests", specifier = "==2.31.0" },
@@ -679,18 +692,19 @@ dev = [
 
 [[package]]
 name = "msgram-core"
-version = "1.5.5rc4"
+version = "1.5.5rc7"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "ahpy" },
     { name = "marshmallow" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "scikit-learn" },
     { name = "scipy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/25/3c/7527e934e2e533a5319352ac9ddf013c72259873023670c5ad6fef159bc7/msgram_core-1.5.5rc4.tar.gz", hash = "sha256:9ce949161ece39b9828bb4a54f98dff9b24dc27ace48bb488b6015028a1f75e3", size = 53743, upload-time = "2026-10-22T17:41:14.528Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e4/11/cba8f173bc6123c2ee964618bf6f39a5417f39721c0610d3049f71f4a263/msgram_core-1.5.5rc7.tar.gz", hash = "sha256:bfa220f5a3ba27cf91511a4b8bc6b2e5a07e160a2bc88750016caab460c4d4c5", size = 56613, upload-time = "2026-11-18T15:40:18.908Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/b6/314d71a1c67e120899552c1284ccdce7c8646e4872ae89a4e4d460e775d6/msgram_core-1.5.5rc4-py3-none-any.whl", hash = "sha256:938b51f15daa174999cbcbda00046daaa716620ea7c0de4a60d25a6a22a35a1f", size = 43085, upload-time = "2026-10-22T17:41:11.98Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/ac/822a7a62cfdefe5765e33cf8a34f7a79ea4e888affc633dadea37972350a/msgram_core-1.5.5rc7-py3-none-any.whl", hash = "sha256:fa619bdd4aea17f702e57c0330bb6342d009522deb85311cfc5249287216a04f", size = 46116, upload-time = "2026-11-18T15:40:17.318Z" },
 ]
 
 [[package]]

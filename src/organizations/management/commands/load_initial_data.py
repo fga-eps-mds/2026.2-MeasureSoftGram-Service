@@ -93,6 +93,23 @@ BADGE_DEMO_REPOSITORIES = [
 class Command(BaseCommand):
     help = "Registra os dados iniciais no banco de dados"
 
+    def create_superadmin(self):
+        """
+        Superusuário só com as credenciais do ambiente: sem SUPERADMIN_USERNAME e SUPERADMIN_PASSWORD, nenhum é criado
+        (antes caía em admin/admin, achado do BUG05.04, #151).
+        """
+        username = os.getenv("SUPERADMIN_USERNAME")
+        password = os.getenv("SUPERADMIN_PASSWORD")
+        if not username or not password:
+            logger.warning("SUPERADMIN_USERNAME ou SUPERADMIN_PASSWORD não definidos: nenhum superusuário criado.")
+            return
+        with contextlib.suppress(IntegrityError):
+            get_user_model().objects.create_superuser(
+                username=username,
+                email=os.getenv("SUPERADMIN_EMAIL", ""),
+                password=password,
+            )
+
     def add_arguments(self, parser):
         parser.add_argument(
             "--reset-demo-analyses",
@@ -636,13 +653,7 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         self.fake_data = kwargs.get("fake_data") or kwargs.get("reset_demo_analyses")
 
-        user_model = get_user_model()
-        with contextlib.suppress(IntegrityError), transaction.atomic():
-            user_model.objects.create_superuser(
-                username=os.getenv("SUPERADMIN_USERNAME", "admin"),
-                email=os.getenv("SUPERADMIN_EMAIL", "admin@admin.com"),
-                password=os.getenv("SUPERADMIN_PASSWORD", "admin"),
-            )
+        self.create_superadmin()
 
         # Metodologia: roda a cada subida, é idempotente e não toca em dados
         # de usuários.
