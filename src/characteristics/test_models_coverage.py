@@ -7,6 +7,7 @@ from characteristics.models import (
     CalculatedCharacteristic,
     SupportedCharacteristic,
 )
+from math_model.models import QualityAnalysis
 from subcharacteristics.models import (
     CalculatedSubCharacteristic,
     SupportedSubCharacteristic,
@@ -20,6 +21,7 @@ class SupportedCharacteristicModelCoverageTestCase(APITestCaseExpanded):
         self.product = self.get_product(self.org)
         self.repository = self.get_repository(self.product)
         self.pre_config = self.product.release_configuration.first()
+        self.analysis = QualityAnalysis.objects.create(repository=self.repository)
 
     def test_supported_characteristic_str_returns_name(self):
         characteristic = SupportedCharacteristic.objects.get(key="reliability")
@@ -51,15 +53,18 @@ class SupportedCharacteristicModelCoverageTestCase(APITestCaseExpanded):
 
         now = timezone.now()
         other_repo = self.get_repository(self.product, name="Second Repository")
+        other_analysis = QualityAnalysis.objects.create(repository=other_repo)
         CalculatedCharacteristic.objects.create(
             characteristic=reliability,
             repository=self.repository,
+            analysis=self.analysis,
             value=0.61,
             created_at=now - timedelta(hours=1),
         )
         CalculatedCharacteristic.objects.create(
             characteristic=reliability,
             repository=other_repo,
+            analysis=other_analysis,
             value=0.89,
             created_at=now,
         )
@@ -71,6 +76,7 @@ class SupportedCharacteristicModelCoverageTestCase(APITestCaseExpanded):
         CalculatedCharacteristic.objects.create(
             characteristic=reliability,
             repository=self.repository,
+            analysis=self.analysis,
             value=0.77,
         )
         SupportedCharacteristic.objects.create(
@@ -95,6 +101,7 @@ class SupportedCharacteristicModelCoverageTestCase(APITestCaseExpanded):
         CalculatedSubCharacteristic.objects.create(
             subcharacteristic=testing_status,
             repository=self.repository,
+            analysis=self.analysis,
             value=0.91,
         )
         extra_sub = SupportedSubCharacteristic.objects.create(

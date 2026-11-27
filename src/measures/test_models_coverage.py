@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from math_model.models import QualityAnalysis
 from measures.models import CalculatedMeasure, SupportedMeasure
 from metrics.models import CollectedMetric, SupportedMetric
 from utils.tests import APITestCaseExpanded
@@ -12,6 +13,7 @@ class SupportedMeasureModelCoverageTestCase(APITestCaseExpanded):
         self.org = self.get_organization()
         self.product = self.get_product(self.org)
         self.repository = self.get_repository(self.product)
+        self.analysis = QualityAnalysis.objects.create(repository=self.repository)
 
     def test_supported_measure_str_returns_name(self):
         measure = SupportedMeasure.objects.get(key="test_coverage")
@@ -34,12 +36,14 @@ class SupportedMeasureModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=sum_metric,
             repository=self.repository,
+            analysis=self.analysis,
             qualifier="FIL",
             value=180.0,
         )
         CollectedMetric.objects.create(
             metric=builds_metric,
             repository=self.repository,
+            analysis=self.analysis,
             qualifier="FIL",
             value=6.0,
         )
@@ -71,12 +75,14 @@ class SupportedMeasureModelCoverageTestCase(APITestCaseExpanded):
         CalculatedMeasure.objects.create(
             measure=measure,
             repository=self.repository,
+            analysis=self.analysis,
             value=0.45,
             created_at=now - timedelta(hours=2),
         )
         CalculatedMeasure.objects.create(
             measure=measure,
             repository=self.repository,
+            analysis=self.analysis,
             value=0.82,
             created_at=now,
         )
