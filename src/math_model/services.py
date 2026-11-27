@@ -124,6 +124,43 @@ class MathModelServices:
         )
         return collected
 
+    @staticmethod
+    def _collect_file_metric_keys(collected_metrics: List[CollectedMetric]) -> Dict[str, set]:
+        """Agrupa chaves de métricas por caminho de arquivo não vazio."""
+        empty_paths = {cm.path for cm in collected_metrics if cm.metric.key == "ncloc" and cm.value == 0}
+        file_keys: Dict[str, set] = defaultdict(set)
+        for metric in collected_metrics:
+            if metric.qualifier == "FIL" and metric.path not in empty_paths:
+                file_keys[metric.path].add(metric.metric.key)
+        return file_keys
+
+    def _build_measure_entry(self, measure, metric_index, file_keys: Dict[str, set]):
+        """Valida insumos e monta a entrada da medida para o cálculo no core."""
+        required_file_keys = {metric.key for metric in measure.metrics.all()} & _LISTED_FIL_METRICS
+        for keys in file_keys.values():
+            self.missing_inputs.update(required_file_keys - keys)
+
+        metric_params = self._resolve_metric_params_in_memory(measure, metric_index)
+        has_valid_params = bool(metric_params) and all(
+            value is not None and (not isinstance(value, list) or len(value) > 0)
+            for value in metric_params.values()
+        )
+        if not has_valid_params:
+            self.missing_inputs.add(measure.key)
+            self.missing_inputs.update(key for key, value in metric_params.items() if value is None or value == [])
+            return None
+
+        return {
+            "key": measure.key,
+            "metrics": [
+                {
+                    "key": key,
+                    "value": [float(v) for v in value] if isinstance(value, list) else [float(value)],
+                }
+                for key, value in metric_params.items()
+            ],
+        }
+
     def build_calculated_measures(
         self,
         measure_keys: List[str],
@@ -137,7 +174,7 @@ class MathModelServices:
         skipped_keys = sorted(set(measure_keys).intersection(RUNTIME_MEASURE_KEYS))
         if skipped_keys:
             logger.warning(
-                "Medidas de runtime excluídas do cálculo: %s. " "Este fluxo não fornece comparação entre releases.",
+                "Medidas de runtime excluídas do cálculo: %s. Este fluxo não fornece comparação entre releases.",
                 ", ".join(skipped_keys),
             )
 
@@ -147,40 +184,12 @@ class MathModelServices:
             .prefetch_related("metrics")
         )
 
+        file_keys = self._collect_file_metric_keys(collected_metrics)
         core_params = {"measures": []}
         for measure in qs:
-            required_file_keys = {metric.key for metric in measure.metrics.all()} & _LISTED_FIL_METRICS
-            file_keys = defaultdict(set)
-            empty_paths = {cm.path for cm in collected_metrics if cm.metric.key == "ncloc" and cm.value == 0}
-            for metric in collected_metrics:
-                if metric.qualifier == "FIL" and metric.path not in empty_paths:
-                    file_keys[metric.path].add(metric.metric.key)
-            for keys in file_keys.values():
-                self.missing_inputs.update(required_file_keys - keys)
-            metric_params = self._resolve_metric_params_in_memory(
-                measure,
-                metric_index,
-            )
-            if metric_params and all(
-                value is not None and (not isinstance(value, list) or len(value) > 0)
-                for value in metric_params.values()
-            ):
-                core_params["measures"].append(
-                    {
-                        "key": measure.key,
-                        "metrics": [
-                            {
-                                "key": key,
-                                "value": ([float(v) for v in value] if isinstance(value, list) else [float(value)]),
-                            }
-                            for key, value in metric_params.items()
-                        ],
-                    }
-                )
-
-            else:
-                self.missing_inputs.add(measure.key)
-                self.missing_inputs.update(key for key, value in metric_params.items() if value is None or value == [])
+            entry = self._build_measure_entry(measure, metric_index, file_keys)
+            if entry is not None:
+                core_params["measures"].append(entry)
 
         calculated_result = _call_core(
             calculate_measures,
