@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
+from math_model.models import QualityAnalysis
 from metrics.models import CollectedMetric, SupportedMetric
 from utils.tests import APITestCaseExpanded
 
@@ -11,6 +12,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         self.org = self.get_organization()
         self.product = self.get_product(self.org)
         self.repository = self.get_repository(self.product)
+        self.analysis = QualityAnalysis.objects.create(repository=self.repository)
 
     def test_supported_metric_str_returns_key(self):
         metric = SupportedMetric.objects.get(key="coverage")
@@ -31,6 +33,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=coverage_metric,
             repository=self.repository,
+            analysis=self.analysis,
             path="src/module.py",
             qualifier="FIL",
             value=85.0,
@@ -39,6 +42,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=ncloc_metric,
             repository=self.repository,
+            analysis=self.analysis,
             path="src/module.py",
             qualifier="FIL",
             value=100.0,
@@ -48,6 +52,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=coverage_metric,
             repository=self.repository,
+            analysis=self.analysis,
             path="src/__init__.py",
             qualifier="FIL",
             value=0.0,
@@ -56,6 +61,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=ncloc_metric,
             repository=self.repository,
+            analysis=self.analysis,
             path="src/__init__.py",
             qualifier="FIL",
             value=0.0,
@@ -65,6 +71,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=coverage_metric,
             repository=self.repository,
+            analysis=self.analysis,
             path="src/legacy.py",
             qualifier="FIL",
             value=40.0,
@@ -84,6 +91,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=tests_metric,
             repository=self.repository,
+            analysis=self.analysis,
             path="tests/test_sample.py",
             qualifier="UTS",
             value=14.0,
@@ -92,6 +100,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=ncloc_metric,
             repository=self.repository,
+            analysis=self.analysis,
             path="tests/test_sample.py",
             qualifier="UTS",
             value=60.0,
@@ -111,6 +120,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=issues_metric,
             repository=self.repository,
+            analysis=self.analysis,
             qualifier="FIL",
             value=8.0,
             created_at=now - timedelta(hours=1),
@@ -118,6 +128,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=issues_metric,
             repository=self.repository,
+            analysis=self.analysis,
             qualifier="FIL",
             value=12.0,
             created_at=now,
@@ -136,6 +147,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=ncloc_metric,
             repository=self.repository,
+            analysis=self.analysis,
             qualifier="TRK",
             value=500.0,
             created_at=now - timedelta(hours=1),
@@ -143,6 +155,7 @@ class SupportedMetricModelCoverageTestCase(APITestCaseExpanded):
         CollectedMetric.objects.create(
             metric=ncloc_metric,
             repository=self.repository,
+            analysis=self.analysis,
             qualifier="TRK",
             value=750.0,
             created_at=now,

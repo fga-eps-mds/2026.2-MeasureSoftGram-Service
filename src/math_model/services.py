@@ -5,6 +5,9 @@ from django.db import transaction
 from django.utils import timezone
 from resources import calculate_characteristics, calculate_measures, calculate_subcharacteristics, calculate_tsqmi
 
+from math_model.models import QualityAnalysis
+from releases.analyses import resolve_active_release
+
 from characteristics.models import CalculatedCharacteristic, SupportedCharacteristic
 from characteristics.serializers import CalculatedCharacteristicSerializer
 from measures.models import CalculatedMeasure, SupportedMeasure
@@ -69,6 +72,9 @@ class MathModelServices:
         # instante da coleta, definido em build_collected_metrics e repassado às
         # camadas calculadas em persist_all
         self.collected_at = None
+        self.missing_inputs = set()
+        self.release_configuration = None
+        self.release = None
 
     # ---------- FASE 1: build em memória ----------
 
@@ -93,7 +99,7 @@ class MathModelServices:
                 created_at=collected_at,
             )
             for metric in process_metrics
-            if metric["name"] in supported_metrics
+            if metric["name"] in supported_metrics and metric.get("value") is not None
         ]
         collected.extend(
             CollectedMetric(
@@ -106,10 +112,54 @@ class MathModelServices:
             )
             for component in sonar_components
             for obj in component["measures"]
-            if obj["metric"] in supported_metrics
+            if obj["metric"] in supported_metrics and obj.get("value") is not None
         )
 
+        self.missing_inputs.update(metric["name"] for metric in process_metrics if metric.get("value") is None)
+        self.missing_inputs.update(
+            obj["metric"]
+            for component in sonar_components
+            for obj in component["measures"]
+            if obj.get("value") is None
+        )
         return collected
+
+    @staticmethod
+    def _collect_file_metric_keys(collected_metrics: List[CollectedMetric]) -> Dict[str, set]:
+        """Agrupa chaves de métricas por caminho de arquivo não vazio."""
+        empty_paths = {cm.path for cm in collected_metrics if cm.metric.key == "ncloc" and cm.value == 0}
+        file_keys: Dict[str, set] = defaultdict(set)
+        for metric in collected_metrics:
+            if metric.qualifier == "FIL" and metric.path not in empty_paths:
+                file_keys[metric.path].add(metric.metric.key)
+        return file_keys
+
+    def _build_measure_entry(self, measure, metric_index, file_keys: Dict[str, set]):
+        """Valida insumos e monta a entrada da medida para o cálculo no core."""
+        required_file_keys = {metric.key for metric in measure.metrics.all()} & _LISTED_FIL_METRICS
+        for keys in file_keys.values():
+            self.missing_inputs.update(required_file_keys - keys)
+
+        metric_params = self._resolve_metric_params_in_memory(measure, metric_index)
+        has_valid_params = bool(metric_params) and all(
+            value is not None and (not isinstance(value, list) or len(value) > 0)
+            for value in metric_params.values()
+        )
+        if not has_valid_params:
+            self.missing_inputs.add(measure.key)
+            self.missing_inputs.update(key for key, value in metric_params.items() if value is None or value == [])
+            return None
+
+        return {
+            "key": measure.key,
+            "metrics": [
+                {
+                    "key": key,
+                    "value": [float(v) for v in value] if isinstance(value, list) else [float(value)],
+                }
+                for key, value in metric_params.items()
+            ],
+        }
 
     def build_calculated_measures(
         self,
@@ -118,15 +168,13 @@ class MathModelServices:
         collected_metrics: List[CollectedMetric],
     ) -> Tuple[List[CalculatedMeasure], Dict[str, float]]:
         """Calcula medidas a partir das métricas em memória."""
+        self.release_configuration = release_configuration
         metric_index = self._index_metrics_by_key(collected_metrics)
 
-        skipped_keys = sorted(
-            set(measure_keys).intersection(RUNTIME_MEASURE_KEYS)
-        )
+        skipped_keys = sorted(set(measure_keys).intersection(RUNTIME_MEASURE_KEYS))
         if skipped_keys:
             logger.warning(
-                "Medidas de runtime excluídas do cálculo: %s. "
-                "Este fluxo não fornece comparação entre releases.",
+                "Medidas de runtime excluídas do cálculo: %s. Este fluxo não fornece comparação entre releases.",
                 ", ".join(skipped_keys),
             )
 
@@ -136,29 +184,12 @@ class MathModelServices:
             .prefetch_related("metrics")
         )
 
+        file_keys = self._collect_file_metric_keys(collected_metrics)
         core_params = {"measures": []}
         for measure in qs:
-            metric_params = self._resolve_metric_params_in_memory(
-                measure,
-                metric_index,
-            )
-            if metric_params and all(
-                value is not None
-                and (not isinstance(value, list) or len(value) > 0)
-                for value in metric_params.values()
-            ):
-                core_params["measures"].append(
-                    {
-                        "key": measure.key,
-                        "metrics": [
-                            {
-                                "key": key,
-                                "value": ([float(v) for v in value] if isinstance(value, list) else [float(value)]),
-                            }
-                            for key, value in metric_params.items()
-                        ],
-                    }
-                )
+            entry = self._build_measure_entry(measure, metric_index, file_keys)
+            if entry is not None:
+                core_params["measures"].append(entry)
 
         calculated_result = _call_core(
             calculate_measures,
@@ -170,6 +201,7 @@ class MathModelServices:
         instances: List[CalculatedMeasure] = []
         for measure in qs:
             if measure.key not in calculated_values:
+                self.missing_inputs.add(measure.key)
                 continue
             instances.append(
                 CalculatedMeasure(
@@ -289,9 +321,7 @@ class MathModelServices:
                 )
 
         if not chars_params:
-            raise CalculateModelException(
-                "Nenhuma característica calculável com as métricas fornecidas."
-            )
+            raise CalculateModelException("Nenhuma característica calculável com as métricas fornecidas.")
 
         core_params = {
             "tsqmi": {"key": "tsqmi", "characteristics": chars_params},
@@ -320,6 +350,24 @@ class MathModelServices:
         As camadas calculadas recebem o created_at das métricas da coleta, para
         que todas as linhas de uma análise tenham o mesmo instante.
         """
+        created_at = self.collected_at or timezone.now()
+        # Lock do repositório serializa persistências concorrentes da Action.
+        type(self.repository).objects.select_for_update().get(pk=self.repository.pk)
+        release = resolve_active_release(self.repository, created_at)
+        if getattr(self, "release_resolved", False) and release != self.release:
+            raise CalculateModelException("A release ativa mudou durante o cálculo; envie a coleta novamente.")
+        analysis = QualityAnalysis.objects.create(
+            repository=self.repository,
+            release=release,
+            release_configuration=self.release_configuration,
+            created_at=created_at,
+            is_partial=bool(self.missing_inputs),
+            missing_inputs=sorted(self.missing_inputs),
+        )
+        for instance in (*collected_metrics, *calculated_measures, *calculated_subchars, *calculated_chars, tsqmi):
+            if instance.repository_id != self.repository.pk:
+                raise CalculateModelException("Camada pertence a outro repositório.")
+            instance.analysis = analysis
         if self.collected_at is not None:
             for instance in (*calculated_measures, *calculated_subchars, *calculated_chars, tsqmi):
                 instance.created_at = self.collected_at
@@ -335,6 +383,15 @@ class MathModelServices:
         tsqmi.save()
 
         return {
+            "analysis": analysis.pk,
+            "release": analysis.release_id,
+            "is_partial": analysis.is_partial,
+            "missing_inputs": analysis.missing_inputs,
+            **(
+                {"warning": "Nenhuma release ativa; análise salva no histórico do repositório."}
+                if release is None
+                else {}
+            ),
             "metrics": CollectedMetricSerializer(saved_metrics, many=True).data,
             "measures": CalculatedMeasureSerializer(saved_measures, many=True).data,
             "subcharacteristics": CalculatedSubCharacteristicSerializer(
@@ -421,9 +478,7 @@ class MathModelServices:
         metric_keys = [sm.key for sm in measure.metrics.all()]
 
         listed_keys = [key for key in metric_keys if key in _LISTED_FIL_METRICS]
-        aligned = MathModelServices._align_listed_metrics_by_path(
-            measure.key, listed_keys, metric_index, empty_paths
-        )
+        aligned = MathModelServices._align_listed_metrics_by_path(measure.key, listed_keys, metric_index, empty_paths)
 
         params: Dict[str, object] = {}
         for key in metric_keys:
